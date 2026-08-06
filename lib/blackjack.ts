@@ -29,12 +29,15 @@ export type HandScore = {
   isSoft: boolean;
 };
 
+export const DECK_COUNT = 6;
+export const SHOE_SIZE = DECK_COUNT * 52;
+
 export type SideBetResult = {
   label: string;
   payout: number;
 };
 
-export function createShoe(decks = 4, random = Math.random): Card[] {
+export function createShoe(decks = DECK_COUNT, random = Math.random): Card[] {
   const cards: Card[] = [];
 
   for (let deck = 0; deck < decks; deck += 1) {
@@ -53,7 +56,7 @@ export function createShoe(decks = 4, random = Math.random): Card[] {
   return cards;
 }
 
-export function createCutPoint(totalCards = 208, random = Math.random): number {
+export function createCutPoint(totalCards = SHOE_SIZE, random = Math.random): number {
   // Place the cut card 55–75% of the way through the shoe.
   const penetration = 0.55 + random() * 0.2;
   return Math.floor(totalCards * (1 - penetration));

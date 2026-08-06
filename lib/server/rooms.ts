@@ -3,6 +3,7 @@ import {
   canSplit,
   createCutPoint,
   createShoe,
+  DECK_COUNT,
   isBlackjack,
   playDealer,
   scoreHand,
@@ -333,7 +334,7 @@ export function createRoom(input: {
     phase: "lobby",
     table: { ...selectedTable, chips: [...selectedTable.chips] },
     players: [host],
-    shoe: createShoe(4),
+    shoe: createShoe(DECK_COUNT),
     cutPoint: createCutPoint(),
     dealer: [],
     currentPlayerId: null,
@@ -411,7 +412,7 @@ export function roomAction(
     if (player.id !== room.hostId) throw new RoomError("Only the host can open the next round", 403);
     if (room.phase !== "settled") throw new RoomError("The current round is not settled", 409);
     if (room.shoe.length <= room.cutPoint) {
-      room.shoe = createShoe(4);
+      room.shoe = createShoe(DECK_COUNT);
       room.cutPoint = createCutPoint();
     }
     room.dealer = [];

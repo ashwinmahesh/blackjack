@@ -1,6 +1,6 @@
 # Dealer's Edge
 
-A mobile-first, four-deck blackjack game built with Next.js. The app uses practice tokens only and supports persistent device-local balances, four table-stakes tiers, hit, stand, double, one equal-value split per hand (including mixed 10/J/Q/K pairs), late surrender, and Perfect Pairs, 21+3, and Match the Dealer side bets.
+A mobile-first, six-deck blackjack game built with Next.js. The app uses practice tokens only and supports persistent device-local balances, four table-stakes tiers, hit, stand, double, one equal-value split per hand (including mixed 10/J/Q/K pairs), late surrender, and Perfect Pairs, 21+3, and Match the Dealer side bets.
 
 ## Quick start
 
@@ -76,11 +76,32 @@ gcloud run deploy dealers-edge \
 
 For a private service, omit `--allow-unauthenticated`. Configure the Cloud Run startup probe path as `/api/health` if you want an HTTP probe in addition to Cloud Run's default TCP startup check.
 
+### GitHub Actions deployment
+
+The workflow at `.github/workflows/deploy-cloud-run.yml` runs on pushes to `main` and can also be started manually from the Actions tab. It authenticates without a service-account key, builds and pushes commit-specific and `latest` image tags to Artifact Registry, then deploys the commit-specific image to Cloud Run.
+
+Create these GitHub repository **Actions variables** under **Settings → Secrets and variables → Actions → Variables**:
+
+| Variable | Example | Purpose |
+| --- | --- | --- |
+| `GCP_PROJECT_ID` | `your-project-id` | Google Cloud project ID |
+| `GCP_REGION` | `us-central1` | Artifact Registry and Cloud Run region |
+| `GAR_REPOSITORY` | `web-apps` | Existing Artifact Registry Docker repository |
+| `IMAGE_NAME` | `dealers-edge` | Container image name |
+| `CLOUD_RUN_SERVICE` | `dealers-edge` | Cloud Run service to create or update |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/123456789/locations/global/workloadIdentityPools/github/providers/blackjack` | Full Workload Identity provider resource name; it uses the numeric project number |
+| `GCP_SERVICE_ACCOUNT` | `github-deploy@your-project-id.iam.gserviceaccount.com` | Service account impersonated by GitHub Actions |
+| `CLOUD_RUN_MAX_INSTANCES` | `1` | Optional; defaults to `1` while multiplayer rooms use process-local memory |
+
+The service account needs permission to push images and deploy the service, typically `roles/artifactregistry.writer` and `roles/run.admin`, plus permission to act as the Cloud Run runtime service account when required. Configure the Workload Identity provider to trust only this GitHub repository, and grant its repository principal `roles/iam.workloadIdentityUser` on `GCP_SERVICE_ACCOUNT`.
+
+The Artifact Registry repository must exist before the first run. The workflow intentionally deploys the SHA-tagged image rather than `latest`, so each Cloud Run revision points to the exact image built by that workflow run.
+
 ## Architecture
 
 The token balance is persisted in browser storage, while an unfinished solo round resets when the page reloads. The same container includes the server-authoritative multiplayer layer:
 
-- `POST /api/rooms` creates a protected five-seat room and a server-owned four-deck shoe.
+- `POST /api/rooms` creates a protected five-seat room and a server-owned six-deck shoe.
 - `POST /api/rooms/:code/join` validates the passcode and assigns a private player session token.
 - `GET /api/rooms/:code` returns safe room state without passcodes, session tokens, or shoe order.
 - `POST /api/rooms/:code/ready` updates a player seat using its private session token.

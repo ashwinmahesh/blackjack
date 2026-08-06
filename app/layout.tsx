@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Dealer's Edge — Blackjack",
-  description: "A polished four-deck blackjack table built for every screen.",
+  description: "A polished six-deck blackjack table built for every screen.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

@@ -7,6 +7,7 @@ import {
   Card as CardType,
   createCutPoint,
   createShoe,
+  DECK_COUNT,
   dealerShouldHit,
   isBlackjack,
   playDealer,
@@ -14,12 +15,14 @@ import {
   scoreMatchDealer,
   scorePerfectPairs,
   scoreTwentyOnePlusThree,
+  SHOE_SIZE,
 } from "../lib/blackjack";
 
 type Phase = "betting" | "dealing" | "playing" | "dealerTurn" | "settled" | "shuffling";
 type HandStatus = "active" | "standing" | "busted" | "won" | "lost" | "push" | "surrendered";
 type SideBetKey = "perfectPairs" | "twentyOnePlusThree" | "matchDealer";
 type SideBets = Record<SideBetKey, number>;
+type SeenCardCounts = Record<CardType["rank"], number>;
 
 type SideBetOutcome = {
   name: string;
@@ -39,7 +42,8 @@ type GameState = {
   startingBankroll: number;
   currentBet: number;
   sideBets: SideBets;
-  sideResults: SideBetOutcome[];
+  seenCardCounts: SeenCardCounts;
+  dealerHoleSeen: boolean;
   shoe: CardType[];
   cutPoint: number;
   dealer: CardType[];
@@ -107,6 +111,9 @@ const SIDE_BET_LABELS: Record<SideBetKey, { name: string; short: string }> = {
   twentyOnePlusThree: { name: "21 + 3", short: "21 + 3" },
   matchDealer: { name: "Match the Dealer", short: "Match" },
 };
+const CARD_COUNT_RANKS: CardType["rank"][] = [
+  "A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3", "2",
+];
 
 const DEAL_DELAY = 330;
 
@@ -122,6 +129,18 @@ const SUIT_MARKS: Record<CardType["suit"], string> = {
 
 function tokenAmount(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value);
+}
+
+function emptySeenCardCounts(): SeenCardCounts {
+  return Object.fromEntries(CARD_COUNT_RANKS.map((rank) => [rank, 0])) as SeenCardCounts;
+}
+
+function addSeenCards(counts: SeenCardCounts, cards: CardType[]): SeenCardCounts {
+  const next = { ...counts };
+  cards.forEach((card) => {
+    next[card.rank] += 1;
+  });
+  return next;
 }
 
 function draw(shoe: CardType[]) {
@@ -301,6 +320,57 @@ function PlayingCard({
   );
 }
 
+function RoomPlayerSeat({
+  player,
+  isLocal,
+  isActive,
+}: {
+  player: RoomPlayerView;
+  isLocal: boolean;
+  isActive: boolean;
+}) {
+  return (
+    <article
+      className={`roomPlayerSeat ${isLocal ? "roomLocalPlayer" : "roomOpponentPlayer"} ${isActive ? "activeTurn" : ""}`}
+      aria-current={isActive ? "true" : undefined}
+    >
+      {isActive ? (
+        <span className="roomTurnBadge">
+          <i /> {isLocal ? "Your turn" : "Playing"}
+        </span>
+      ) : null}
+      <header className="roomPlayerSeatHeader">
+        <span className="roomPlayerIdentity">
+          <i className="roomPlayerAvatar">{player.name.slice(0, 1).toUpperCase()}</i>
+          <span>
+            <small>{isLocal ? "Your hand" : "Player"}</small>
+            <strong>{player.name}</strong>
+          </span>
+        </span>
+        <span className="roomPlayerBalance">◎ {tokenAmount(player.bankroll)}</span>
+      </header>
+      {player.hands.length ? (
+        <div className={`roomHands ${isLocal ? "roomLocalHands" : "roomOpponentHands"}`}>
+          {player.hands.map((hand, handIndex) => (
+            <div
+              className={`roomHand ${isActive && handIndex === player.activeHand ? "activeRoomHand" : ""}`}
+              key={handIndex}
+            >
+              <div className={isLocal ? "roomLocalCardFan" : "miniCardFan"}>
+                {hand.cards.map((card) => <PlayingCard card={card} key={card.id} />)}
+              </div>
+              <small>{scoreHand(hand.cards).total} · bet {tokenAmount(hand.bet)}</small>
+              {hand.result ? <b className={hand.result === "BUST" ? "bust" : ""}>{hand.result}</b> : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="roomWaiting">{player.bet ? `Bet ${tokenAmount(player.bet)}` : "Waiting for bet"}</div>
+      )}
+    </article>
+  );
+}
+
 function DeckIcon() {
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true">
@@ -391,6 +461,11 @@ export default function BlackjackGame() {
   const [roomSession, setRoomSession] = useState<RoomSession | null>(null);
   const [homeNotice, setHomeNotice] = useState("");
   const [roomWager, setRoomWager] = useState(10);
+  const [cardCountOpen, setCardCountOpen] = useState(false);
+  const [sideBetCelebration, setSideBetCelebration] = useState<{
+    id: number;
+    outcomes: SideBetOutcome[];
+  } | null>(null);
   const gameRef = useRef<GameState | null>(null);
   const soundEnabledRef = useRef(true);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -398,6 +473,9 @@ export default function BlackjackGame() {
   const gameBankroll = game?.bankroll;
   const selectedTable = TABLES.find((table) => table.id === selectedTableId) ?? TABLES[0];
   const sideBetValues = [0, selectedTable.minimum / 2, selectedTable.minimum, selectedTable.minimum * 2];
+  const seenCardTotal = game
+    ? Object.values(game.seenCardCounts).reduce((total, count) => total + count, 0)
+    : 0;
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -433,6 +511,12 @@ export default function BlackjackGame() {
   }, [soundEnabled]);
 
   useEffect(() => {
+    if (!sideBetCelebration) return;
+    const timer = window.setTimeout(() => setSideBetCelebration(null), 2600);
+    return () => window.clearTimeout(timer);
+  }, [sideBetCelebration]);
+
+  useEffect(() => {
     if (!activeRoomCode) return;
     let cancelled = false;
 
@@ -456,7 +540,7 @@ export default function BlackjackGame() {
     };
   }, [activeRoomCode]);
 
-  const playCardSound = useCallback((kind: "deal" | "flip" | "win" | "blackjack" | "lose" | "shuffle") => {
+  const playCardSound = useCallback((kind: "deal" | "flip" | "win" | "blackjack" | "lose" | "shuffle" | "chip") => {
     if (!soundEnabledRef.current || typeof window === "undefined") return;
 
     const context = audioContextRef.current ?? new AudioContext();
@@ -510,17 +594,60 @@ export default function BlackjackGame() {
     }
 
     if (kind === "lose") {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.type = "sawtooth";
-      oscillator.frequency.setValueAtTime(210, context.currentTime);
-      oscillator.frequency.exponentialRampToValueAtTime(62, context.currentTime + 0.34);
-      gain.gain.setValueAtTime(0.07, context.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.36);
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.start();
-      oscillator.stop(context.currentTime + 0.37);
+      const start = context.currentTime;
+      const filter = context.createBiquadFilter();
+      const masterGain = context.createGain();
+
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(760, start);
+      filter.frequency.exponentialRampToValueAtTime(300, start + 0.72);
+      filter.Q.value = 2.1;
+      masterGain.gain.setValueAtTime(0.001, start);
+      masterGain.gain.exponentialRampToValueAtTime(0.075, start + 0.025);
+      masterGain.gain.exponentialRampToValueAtTime(0.001, start + 0.74);
+      filter.connect(masterGain);
+      masterGain.connect(context.destination);
+
+      const hornVoices: Array<{
+        type: OscillatorType;
+        from: number;
+        to: number;
+        level: number;
+      }> = [
+        { type: "sawtooth", from: 220, to: 76, level: 0.55 },
+        { type: "triangle", from: 174, to: 60, level: 0.42 },
+      ];
+
+      hornVoices.forEach((voice) => {
+        const oscillator = context.createOscillator();
+        const voiceGain = context.createGain();
+        oscillator.type = voice.type;
+        oscillator.frequency.setValueAtTime(voice.from, start);
+        oscillator.frequency.exponentialRampToValueAtTime(voice.to, start + 0.68);
+        voiceGain.gain.value = voice.level;
+        oscillator.connect(voiceGain);
+        voiceGain.connect(filter);
+        oscillator.start(start);
+        oscillator.stop(start + 0.76);
+      });
+      return;
+    }
+
+    if (kind === "chip") {
+      [1480, 2290].forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const start = context.currentTime + index * 0.008;
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, start);
+        gain.gain.setValueAtTime(0.001, start);
+        gain.gain.exponentialRampToValueAtTime(index === 0 ? 0.045 : 0.022, start + 0.003);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.075);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + 0.08);
+      });
       return;
     }
 
@@ -561,6 +688,18 @@ export default function BlackjackGame() {
 
     async function playDealerSequence() {
       playCardSound("flip");
+      const dealerHoleCard = startingState!.dealer[1];
+      if (dealerHoleCard && !startingState!.dealerHoleSeen) {
+        setGame((current) =>
+          current?.phase === "dealerTurn" && current.round === dealerSequenceKey
+            ? {
+                ...current,
+                dealerHoleSeen: true,
+                seenCardCounts: addSeenCards(current.seenCardCounts, [dealerHoleCard]),
+              }
+            : current,
+        );
+      }
       await pause(650);
       if (cancelled) return;
 
@@ -573,11 +712,18 @@ export default function BlackjackGame() {
       while (hasLiveHand && dealerShouldHit(dealer)) {
         await pause(540);
         if (cancelled) return;
-        dealer.push(draw(shoe));
+        const dealtCard = draw(shoe);
+        dealer.push(dealtCard);
         playCardSound("deal");
         setGame((current) =>
           current?.phase === "dealerTurn" && current.round === dealerSequenceKey
-            ? { ...current, dealer: [...dealer], shoe: [...shoe], message: "Dealer draws" }
+            ? {
+                ...current,
+                dealer: [...dealer],
+                shoe: [...shoe],
+                seenCardCounts: addSeenCards(current.seenCardCounts, [dealtCard]),
+                message: "Dealer draws",
+              }
             : current,
         );
       }
@@ -627,13 +773,18 @@ export default function BlackjackGame() {
       activeHand.cards.length === 2,
   );
   const shoePercent = useMemo(
-    () => (game ? Math.max(4, (game.shoe.length / 208) * 100) : 100),
+    () => (game ? Math.max(4, (game.shoe.length / SHOE_SIZE) * 100) : 100),
     [game],
   );
   const cutCardReached = Boolean(game && game.shoe.length <= game.cutPoint);
   const roomPlayer = roomSession?.room.players.find(
     (player) => player.id === roomSession.seatId,
   );
+  const roomOpponents = roomSession
+    ? roomSession.room.players.filter((player) => player.id !== roomSession.seatId)
+    : [];
+  const leftRoomOpponents = roomOpponents.filter((_, index) => index % 2 === 0);
+  const rightRoomOpponents = roomOpponents.filter((_, index) => index % 2 === 1);
   const roomActiveHand = roomPlayer?.hands[roomPlayer.activeHand];
   const isRoomHost = Boolean(roomSession && roomSession.room.hostId === roomSession.seatId);
   const isRoomTurn = Boolean(
@@ -656,8 +807,9 @@ export default function BlackjackGame() {
       startingBankroll: startingBalance,
       currentBet: selectedTable.minimum,
       sideBets: { ...EMPTY_SIDE_BETS },
-      sideResults: [],
-      shoe: createShoe(4),
+      seenCardCounts: emptySeenCardCounts(),
+      dealerHoleSeen: false,
+      shoe: createShoe(DECK_COUNT),
       cutPoint: createCutPoint(),
       dealer: [],
       hands: [],
@@ -670,6 +822,7 @@ export default function BlackjackGame() {
   }
 
   function changeBet(amount: number) {
+    if (amount > 0) playCardSound("chip");
     setGame((current) => {
       if (!current || current.phase !== "betting") return current;
       const nextBet = current.currentBet + amount;
@@ -679,6 +832,17 @@ export default function BlackjackGame() {
   }
 
   function cycleSideBet(key: SideBetKey) {
+    if (game?.phase === "betting") {
+      const currentValue = game.sideBets[key];
+      const nextValue = sideBetValues[(sideBetValues.indexOf(currentValue) + 1) % sideBetValues.length];
+      const previewBets = { ...game.sideBets, [key]: nextValue };
+      if (
+        nextValue > currentValue &&
+        game.currentBet + sideBetStake(previewBets) <= game.bankroll
+      ) {
+        playCardSound("chip");
+      }
+    }
     setGame((current) => {
       if (!current || current.phase !== "betting") return current;
       const valueIndex = sideBetValues.indexOf(current.sideBets[key]);
@@ -706,7 +870,8 @@ export default function BlackjackGame() {
       if (context.state === "suspended") void context.resume();
     }
 
-    const shoe = current.shoe.length < 4 ? createShoe(4) : [...current.shoe];
+    const emergencyShuffle = current.shoe.length < 4;
+    const shoe = emergencyShuffle ? createShoe(DECK_COUNT) : [...current.shoe];
     const playerCards = [draw(shoe)];
     const dealerCards = [draw(shoe)];
     playerCards.push(draw(shoe));
@@ -721,7 +886,8 @@ export default function BlackjackGame() {
       bankroll: current.bankroll - openingStake,
       dealer: [],
       shoe,
-      sideResults: [],
+      seenCardCounts: emergencyShuffle ? emptySeenCardCounts() : current.seenCardCounts,
+      dealerHoleSeen: false,
       hands: [{ cards: [], bet, status: "active" }],
       activeHand: 0,
       phase: "dealing",
@@ -729,11 +895,11 @@ export default function BlackjackGame() {
       tone: "neutral",
     });
 
-    const dealSteps: Array<{ recipient: "player" | "dealer"; card: CardType }> = [
-      { recipient: "player", card: playerCards[0] },
-      { recipient: "dealer", card: dealerCards[0] },
-      { recipient: "player", card: playerCards[1] },
-      { recipient: "dealer", card: dealerCards[1] },
+    const dealSteps: Array<{ recipient: "player" | "dealer"; card: CardType; visible: boolean }> = [
+      { recipient: "player", card: playerCards[0], visible: true },
+      { recipient: "dealer", card: dealerCards[0], visible: true },
+      { recipient: "player", card: playerCards[1], visible: true },
+      { recipient: "dealer", card: dealerCards[1], visible: false },
     ];
 
     for (const step of dealSteps) {
@@ -746,15 +912,28 @@ export default function BlackjackGame() {
         return step.recipient === "player"
           ? {
               ...latest,
+              seenCardCounts: step.visible
+                ? addSeenCards(latest.seenCardCounts, [step.card])
+                : latest.seenCardCounts,
               hands: [{ ...latest.hands[0], cards: [...latest.hands[0].cards, step.card] }],
             }
-          : { ...latest, dealer: [...latest.dealer, step.card] };
+          : {
+              ...latest,
+              dealer: [...latest.dealer, step.card],
+              seenCardCounts: step.visible
+                ? addSeenCards(latest.seenCardCounts, [step.card])
+                : latest.seenCardCounts,
+            };
       });
     }
 
     await pause(360);
     const playerNatural = isBlackjack(playerCards);
     const dealerNatural = isBlackjack(dealerCards);
+    const winningSideBets = sideBetResult.outcomes.filter((outcome) => outcome.won);
+    if (winningSideBets.length) {
+      setSideBetCelebration({ id: dealRoundNumber, outcomes: winningSideBets });
+    }
     if (playerNatural || dealerNatural) playCardSound("flip");
     if (playerNatural && !dealerNatural) {
       window.setTimeout(() => playCardSound("blackjack"), 180);
@@ -775,7 +954,10 @@ export default function BlackjackGame() {
           ...latest,
           bankroll: latest.bankroll + sideBetResult.payout + payout,
           dealer: dealerCards,
-          sideResults: sideBetResult.outcomes,
+          dealerHoleSeen: true,
+          seenCardCounts: latest.dealerHoleSeen
+            ? latest.seenCardCounts
+            : addSeenCards(latest.seenCardCounts, [dealerCards[1]]),
           hands: [
             {
               cards: playerCards,
@@ -811,7 +993,6 @@ export default function BlackjackGame() {
         ...latest,
         bankroll: latest.bankroll + sideBetResult.payout,
         dealer: dealerCards,
-        sideResults: sideBetResult.outcomes,
         hands: [{ cards: playerCards, bet, status: "active" }],
         phase: "playing",
         message: "Your move",
@@ -825,9 +1006,10 @@ export default function BlackjackGame() {
     setGame((current) => {
       if (!current || current.phase !== "playing") return current;
       const shoe = [...current.shoe];
+      const dealtCard = draw(shoe);
       const hands = current.hands.map((hand, index) =>
         index === current.activeHand
-          ? { ...hand, cards: [...hand.cards, draw(shoe)] }
+          ? { ...hand, cards: [...hand.cards, dealtCard] }
           : hand,
       );
       const total = scoreHand(hands[current.activeHand].cards).total;
@@ -835,6 +1017,7 @@ export default function BlackjackGame() {
       const next = {
         ...current,
         shoe,
+        seenCardCounts: addSeenCards(current.seenCardCounts, [dealtCard]),
         hands: hands.map((hand, index) =>
           index === current.activeHand && total >= 21
             ? {
@@ -870,9 +1053,10 @@ export default function BlackjackGame() {
       if (hand.cards.length !== 2 || current.bankroll < hand.bet) return current;
 
       const shoe = [...current.shoe];
+      const dealtCard = draw(shoe);
       const hands = current.hands.map((candidate, index) => {
         if (index !== current.activeHand) return candidate;
-        const cards = [...candidate.cards, draw(shoe)];
+        const cards = [...candidate.cards, dealtCard];
         const busted = scoreHand(cards).total > 21;
         if (busted) window.setTimeout(() => playCardSound("lose"), 110);
         return {
@@ -888,6 +1072,7 @@ export default function BlackjackGame() {
         ...current,
         bankroll: current.bankroll - hand.bet,
         shoe,
+        seenCardCounts: addSeenCards(current.seenCardCounts, [dealtCard]),
         hands,
       });
     });
@@ -913,8 +1098,10 @@ export default function BlackjackGame() {
       }
 
       const shoe = [...current.shoe];
-      const firstCards = [original.cards[0], draw(shoe)];
-      const secondCards = [original.cards[1], draw(shoe)];
+      const firstDealtCard = draw(shoe);
+      const secondDealtCard = draw(shoe);
+      const firstCards = [original.cards[0], firstDealtCard];
+      const secondCards = [original.cards[1], secondDealtCard];
       const splitAces = original.cards[0].rank === "A";
       const hands: PlayerHand[] = [firstCards, secondCards].map((cards) => ({
         cards,
@@ -929,6 +1116,7 @@ export default function BlackjackGame() {
         ...current,
         bankroll: current.bankroll - original.bet,
         shoe,
+        seenCardCounts: addSeenCards(current.seenCardCounts, [firstDealtCard, secondDealtCard]),
         hands,
         activeHand: Math.max(0, firstActive),
         message: splitAces
@@ -967,9 +1155,8 @@ export default function BlackjackGame() {
         ...roundState,
         dealer: [],
         hands: [],
-        sideResults: [],
         phase: "shuffling",
-        message: "Cut card reached — shuffling four decks",
+        message: `Cut card reached — shuffling ${DECK_COUNT} decks`,
         tone: "neutral",
       });
       await pause(1400);
@@ -983,7 +1170,9 @@ export default function BlackjackGame() {
           ...current,
           currentBet: Math.min(current.currentBet, affordableBet),
           sideBets: { ...EMPTY_SIDE_BETS },
-          shoe: createShoe(4),
+          seenCardCounts: emptySeenCardCounts(),
+          dealerHoleSeen: false,
+          shoe: createShoe(DECK_COUNT),
           cutPoint: createCutPoint(),
           phase: "betting",
           message:
@@ -1009,8 +1198,8 @@ export default function BlackjackGame() {
         ...current,
         currentBet,
         sideBets,
-        sideResults: [],
         dealer: [],
+        dealerHoleSeen: false,
         hands: [],
         activeHand: 0,
         phase: "betting",
@@ -1154,6 +1343,23 @@ export default function BlackjackGame() {
 
   return (
     <main className="gameShell">
+      {sideBetCelebration ? (
+        <div
+          className="sideBetCelebration"
+          key={sideBetCelebration.id}
+          role="status"
+          aria-live="polite"
+        >
+          <i aria-hidden="true">✦</i>
+          <small>{sideBetCelebration.outcomes.length > 1 ? "Side bets hit" : "Side bet hit"}</small>
+          {sideBetCelebration.outcomes.map((outcome) => (
+            <span key={outcome.name}>
+              <strong>{outcome.name}</strong>
+              <b>{outcome.detail}</b>
+            </span>
+          ))}
+        </div>
+      ) : null}
       <header className="topBar">
         <button
           className="brand"
@@ -1289,33 +1495,34 @@ export default function BlackjackGame() {
 
           <div className="roomGameMessage">{roomSession.room.message}</div>
 
-          <div className="roomPlayerRail">
-            {roomSession.room.players.map((player) => (
-              <article
-                className={`roomPlayerHand ${player.id === roomSession.room.currentPlayerId ? "active" : ""} ${player.id === roomSession.seatId ? "current" : ""}`}
-                key={player.id}
-              >
-                <header>
-                  <strong>{player.name}{player.id === roomSession.seatId ? " (you)" : ""}</strong>
-                  <span>◎ {tokenAmount(player.bankroll)}</span>
-                </header>
-                {player.hands.length ? (
-                  <div className="roomHands">
-                    {player.hands.map((hand, handIndex) => (
-                      <div className="roomHand" key={handIndex}>
-                        <div className="miniCardFan">
-                          {hand.cards.map((card) => <PlayingCard card={card} key={card.id} />)}
-                        </div>
-                        <small>{scoreHand(hand.cards).total} · bet {tokenAmount(hand.bet)}</small>
-                        {hand.result ? <b className={hand.result === "BUST" ? "bust" : ""}>{hand.result}</b> : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="roomWaiting">{player.bet ? `Bet ${tokenAmount(player.bet)}` : "Waiting for bet"}</div>
-                )}
-              </article>
-            ))}
+          <div className="roomPlayersStage">
+            <div className="roomOpponentColumn roomOpponentColumnLeft" aria-label="Players to your left">
+              {leftRoomOpponents.map((player) => (
+                <RoomPlayerSeat
+                  isActive={player.id === roomSession.room.currentPlayerId}
+                  isLocal={false}
+                  key={player.id}
+                  player={player}
+                />
+              ))}
+            </div>
+            {roomPlayer ? (
+              <RoomPlayerSeat
+                isActive={roomPlayer.id === roomSession.room.currentPlayerId}
+                isLocal
+                player={roomPlayer}
+              />
+            ) : null}
+            <div className="roomOpponentColumn roomOpponentColumnRight" aria-label="Players to your right">
+              {rightRoomOpponents.map((player) => (
+                <RoomPlayerSeat
+                  isActive={player.id === roomSession.room.currentPlayerId}
+                  isLocal={false}
+                  key={player.id}
+                  player={player}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="roomGameControls">
@@ -1330,7 +1537,10 @@ export default function BlackjackGame() {
                       <button
                         type="button"
                         key={chip}
-                        onClick={() => setRoomWager((wager) => Math.min((roomPlayer?.bankroll ?? 0), wager + chip))}
+                        onClick={() => {
+                          playCardSound("chip");
+                          setRoomWager((wager) => Math.min((roomPlayer?.bankroll ?? 0), wager + chip));
+                        }}
                       >
                         +{tokenAmount(chip)}
                       </button>
@@ -1366,7 +1576,7 @@ export default function BlackjackGame() {
         </section>
       ) : !game ? (
         <section className="welcomeScreen">
-          <div className="welcomeEyebrow"><span /> Private four-deck table</div>
+          <div className="welcomeEyebrow"><span /> Private {DECK_COUNT}-deck table</div>
           <div className="welcomeMark" aria-hidden="true">♠</div>
           <h1>Play your hand.</h1>
           <p className="welcomeCopy">
@@ -1410,7 +1620,7 @@ export default function BlackjackGame() {
           </div>
 
           <div className="tableFacts">
-            <span><b>4</b> deck shoe</span>
+            <span><b>{DECK_COUNT}</b> deck shoe</span>
             <i />
             <span><b>3:2</b> blackjack</span>
             <i />
@@ -1429,17 +1639,46 @@ export default function BlackjackGame() {
         <section className="tableScreen">
           <div className="tableRail" aria-hidden="true" />
           <div className="tableMeta">
-            <div className="shoeLabel">
-              <DeckIcon />
-              <span><strong>Four deck shoe</strong><small>{game.shoe.length} cards remain</small></span>
-              <i>
-                <b style={{ width: `${shoePercent}%` }} />
-                <em
-                  className={cutCardReached ? "reached" : ""}
-                  style={{ left: `${(game.cutPoint / 208) * 100}%` }}
-                  title="Cut card"
-                />
-              </i>
+            <div className="shoeTracker">
+              <div className="shoeLabel">
+                <DeckIcon />
+                <span><strong>{DECK_COUNT} deck shoe</strong><small>{game.shoe.length} cards remain</small></span>
+                <i>
+                  <b style={{ width: `${shoePercent}%` }} />
+                  <em
+                    className={cutCardReached ? "reached" : ""}
+                    style={{ left: `${(game.cutPoint / SHOE_SIZE) * 100}%` }}
+                    title="Cut card"
+                  />
+                </i>
+              </div>
+              <button
+                className="cardCountToggle"
+                type="button"
+                aria-expanded={cardCountOpen}
+                aria-controls="seen-card-counts"
+                onClick={() => setCardCountOpen((open) => !open)}
+              >
+                <span>Cards seen</span>
+                <b>{seenCardTotal}</b>
+                <i aria-hidden="true">⌄</i>
+              </button>
+              {cardCountOpen ? (
+                <div className="cardCountPanel" id="seen-card-counts">
+                  <header>
+                    <strong>Revealed this shoe</strong>
+                    <small>Resets on shuffle</small>
+                  </header>
+                  <div className="cardCountGrid">
+                    {CARD_COUNT_RANKS.map((rank) => (
+                      <span key={rank}>
+                        <b>{rank}</b>
+                        <strong>{game.seenCardCounts[rank]}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
             <span className="roundLabel">Round {game.round}</span>
           </div>
@@ -1477,15 +1716,6 @@ export default function BlackjackGame() {
             <span>{game.message}</span>
             {game.phase === "betting" ? (
               <small>TABLE MINIMUM {tokenAmount(selectedTable.minimum)}</small>
-            ) : null}
-            {game.sideResults.length ? (
-              <div className="sideResults">
-                {game.sideResults.map((result) => (
-                  <span className={result.won ? "hit" : "miss"} key={result.name}>
-                    <b>{result.name}</b> {result.detail}
-                  </span>
-                ))}
-              </div>
             ) : null}
             {cutCardReached ? (
               <div className="cutCardAlert">
@@ -1619,7 +1849,7 @@ export default function BlackjackGame() {
                   {game.phase === "dealing"
                     ? "Dealing cards"
                     : game.phase === "shuffling"
-                      ? "Shuffling four decks"
+                      ? `Shuffling ${DECK_COUNT} decks`
                       : "Dealer is playing"}
                 </strong>
               </div>
@@ -1716,7 +1946,7 @@ export default function BlackjackGame() {
             <dl>
               <div><dt>Blackjack</dt><dd>Pays 3:2</dd></div>
               <div><dt>Dealer</dt><dd>Stands on all 17s</dd></div>
-              <div><dt>Shoe</dt><dd>4 decks; cut card 55–75% through</dd></div>
+              <div><dt>Shoe</dt><dd>{DECK_COUNT} decks; cut card 55–75% through</dd></div>
               <div><dt>Double</dt><dd>Any first two cards</dd></div>
               <div><dt>Split</dt><dd>Equal values; all 10-value cards match</dd></div>
               <div><dt>Surrender</dt><dd>Late; half the main bet returned</dd></div>
