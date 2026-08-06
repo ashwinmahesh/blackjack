@@ -309,11 +309,11 @@ export function createRoom(input: {
 
   let code = roomCode();
   while (rooms.has(code)) code = roomCode();
-  const requestedBankroll = Math.floor(input.startingBankroll ?? 1000);
+  const requestedBankroll = Math.floor(input.startingBankroll ?? 500);
   const bankroll =
     Number.isFinite(requestedBankroll) && requestedBankroll > 0 && requestedBankroll <= 10_000_000
       ? requestedBankroll
-      : 1000;
+      : 500;
   const selectedTable = ROOM_TABLES.find((table) => table.id === input.tableId) ?? ROOM_TABLES[0];
   const hostToken = playerToken();
   const host: StoredPlayer = {
@@ -363,7 +363,7 @@ export function joinRoom(input: { code: string; name: string; passcode: string }
     id: randomBytes(6).toString("base64url"),
     sessionHash: hashPlayerToken(playerTokenValue),
     name,
-    bankroll: room.players[0]?.bankroll ?? 1000,
+    bankroll: room.players[0]?.bankroll ?? 500,
     bet: 0,
     ready: false,
     joinedAt: Date.now(),

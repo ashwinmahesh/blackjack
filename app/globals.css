@@ -46,6 +46,43 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   z-index: 20;
 }
 
+.achievementBanner { position: fixed; top: max(84px, calc(env(safe-area-inset-top) + 76px)); left: 50%; z-index: 110; width: min(720px, calc(100vw - 30px)); min-height: 108px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: clamp(14px, 3vw, 28px); padding: 16px clamp(18px, 4vw, 34px); overflow: hidden; border: 1px solid rgba(244,211,134,.78); border-radius: 18px; background: radial-gradient(circle at 18% 50%, rgba(239,199,105,.18), transparent 32%), linear-gradient(110deg, rgba(9,49,35,.98), rgba(5,27,20,.98)); box-shadow: 0 22px 70px rgba(0,0,0,.55), 0 0 42px rgba(224,181,87,.2), inset 0 1px rgba(255,255,255,.1); color: #f4d892; pointer-events: none; animation: achievementDrop 3.8s cubic-bezier(.2,.75,.22,1) forwards; will-change: opacity, transform; }
+.achievementBanner::before, .achievementBanner::after { content: ""; position: absolute; width: 170px; height: 170px; border: 1px solid rgba(238,201,119,.1); transform: rotate(45deg); }
+.achievementBanner::before { left: -110px; top: -92px; }
+.achievementBanner::after { right: -120px; bottom: -105px; }
+.achievementMedallion { width: 66px; height: 66px; position: relative; z-index: 1; display: grid; place-items: center; border: 2px solid #e8c270; border-radius: 50%; background: radial-gradient(circle, #d7a94f 0 18%, #173d2e 20% 51%, #d8ae5b 53% 57%, #0b271d 59%); color: #ffe8a9; box-shadow: 0 0 0 5px rgba(232,194,112,.08), 0 8px 22px rgba(0,0,0,.3); font-size: 20px; }
+.achievementCopy { min-width: 0; position: relative; z-index: 1; display: flex; flex-direction: column; }
+.achievementCopy small { color: #a9bcb1; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .23em; }
+.achievementCopy strong { margin: 3px 0 2px; color: #ffe4a0; font: 400 clamp(27px, 4vw, 39px)/1 Georgia, serif; letter-spacing: -.025em; }
+.achievementCopy b { color: #d7e0da; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.achievementLaurel { position: relative; z-index: 1; color: rgba(237,201,120,.42); font-size: 24px; }
+@keyframes achievementDrop {
+  0% { opacity: 0; transform: translate(-50%, -125px) scale(.88); }
+  13% { opacity: 1; transform: translate(-50%, 0) scale(1.025); }
+  20%, 82% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -22px) scale(.98); }
+}
+.tableBustNotice { position: fixed; left: 50%; top: 47%; z-index: 115; width: min(570px, calc(100vw - 30px)); min-height: 190px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: clamp(18px, 4vw, 34px); padding: 26px clamp(22px, 5vw, 42px); overflow: hidden; border: 1px solid rgba(224,99,87,.72); border-radius: 20px; background: radial-gradient(circle at 16% 50%, rgba(203,74,65,.22), transparent 34%), linear-gradient(115deg, rgba(42,16,14,.98), rgba(12,24,19,.98)); box-shadow: 0 28px 90px rgba(0,0,0,.65), 0 0 45px rgba(201,69,61,.2), inset 0 1px rgba(255,255,255,.07); pointer-events: none; animation: bustedSlam 3.3s cubic-bezier(.18,.76,.25,1) forwards; will-change: opacity, transform; }
+.tableBustNotice::before { content: ""; position: absolute; inset: 0; opacity: .14; background: repeating-linear-gradient(125deg, transparent 0 23px, rgba(231,119,105,.25) 24px, transparent 25px 48px); }
+.bustedChipGraphic { width: 112px; height: 112px; position: relative; z-index: 1; display: grid; place-items: center; border: 5px dashed #d56459; border-radius: 50%; background: radial-gradient(circle, #471c19 0 47%, #b44940 49% 55%, #281916 57%); color: #f09c90; filter: drop-shadow(0 13px 13px rgba(0,0,0,.35)); transform: rotate(-8deg); }
+.bustedChipGraphic::before, .bustedChipGraphic::after { content: ""; position: absolute; right: -17px; width: 24px; height: 19px; border: 2px solid #d56459; background: #321917; clip-path: polygon(0 0, 100% 20%, 70% 100%, 15% 72%); }
+.bustedChipGraphic::before { top: 12px; transform: rotate(24deg); }
+.bustedChipGraphic::after { bottom: 5px; right: -9px; transform: rotate(63deg) scale(.72); }
+.bustedChipGraphic > i { font-style: normal; font-size: 39px; }
+.bustedChipGraphic > b { width: 6px; height: 116px; position: absolute; left: 54px; top: -7px; background: #140d0c; clip-path: polygon(15% 0, 100% 0, 55% 38%, 100% 48%, 35% 100%, 0 100%, 45% 56%, 0 44%); transform: rotate(17deg); }
+.tableBustCopy { min-width: 0; position: relative; z-index: 1; display: flex; flex-direction: column; }
+.tableBustCopy small { color: #c9958f; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .2em; }
+.tableBustCopy strong { margin: 2px 0 5px; color: #ff9487; font: 700 clamp(43px, 8vw, 68px)/.95 Georgia, serif; letter-spacing: .025em; text-shadow: 0 4px 20px rgba(203,70,61,.27); }
+.tableBustCopy > b { color: #d7bbb7; font-size: 11px; font-weight: 600; line-height: 1.45; }
+@keyframes bustedSlam {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.55) rotate(-2deg); }
+  11% { opacity: 1; transform: translate(-50%, -50%) scale(.97) rotate(0); }
+  15% { transform: translate(calc(-50% - 8px), -50%) scale(1); }
+  19% { transform: translate(calc(-50% + 7px), -50%) scale(1); }
+  23%, 78% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, calc(-50% + 24px)) scale(.94); }
+}
+
 .topBar {
   height: 74px;
   padding: 0 clamp(18px, 3vw, 46px);
@@ -198,7 +235,8 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomHands { display: flex; align-items: flex-start; justify-content: center; gap: 7px; margin-top: 8px; }
 .roomLocalHands { gap: clamp(8px, 2vw, 22px); margin-top: 10px; }
 .roomHand { display: flex; flex-direction: column; align-items: center; position: relative; }
-.roomHand.activeRoomHand::after { content: ""; position: absolute; left: 12%; right: 12%; bottom: -6px; height: 2px; border-radius: 2px; background: #e8bf69; box-shadow: 0 0 9px rgba(232,191,105,.7); }
+.roomHand.activeRoomHand::before { content: ""; position: absolute; inset: 3px -8px 12px; z-index: -1; border: 2px solid rgba(255,216,126,.88); border-radius: 13px; background: rgba(240,193,99,.055); box-shadow: 0 0 0 2px rgba(240,193,99,.12), 0 0 22px rgba(240,193,99,.25); }
+.roomHand.activeRoomHand::after { content: ""; position: absolute; left: 8%; right: 8%; bottom: -7px; height: 4px; border-radius: 3px; background: #ffda83; box-shadow: 0 0 13px rgba(255,218,131,.95); }
 .roomLocalCardFan { min-height: 130px; display: flex; align-items: center; padding-left: 18px; }
 .roomLocalCardFan .playingCard { width: clamp(78px, 7vw, 96px); margin-left: -18px; border-radius: 8px; }
 .miniCardFan { min-height: 68px; display: flex; align-items: center; padding-left: 9px; }
@@ -319,6 +357,8 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .playerHand { min-width: 100px; position: relative; display: flex; flex-direction: column; align-items: center; transition: .2s ease; }
 .playerHand.active { filter: drop-shadow(0 10px 14px rgba(212,174,98,.12)); }
 .playerHand.active::before { content: ""; position: absolute; inset: 25px -19px 15px; border: 1px solid rgba(212,174,98,.24); border-radius: 16px; z-index: -1; }
+.splitHands .playerHand.active { filter: drop-shadow(0 10px 20px rgba(255,212,117,.32)); }
+.splitHands .playerHand.active::before { inset: 20px -23px 10px; border: 3px solid rgba(255,218,132,.92); border-radius: 18px; background: rgba(240,193,99,.065); box-shadow: 0 0 0 3px rgba(240,193,99,.11), 0 0 27px rgba(255,209,108,.32), inset 0 0 18px rgba(240,193,99,.05); }
 .playerLabel { margin-bottom: 3px; }
 .handBet { margin-top: 7px; color: #e0e6e2; font-size: 15px; font-weight: 700; }
 .handBet span { color: var(--gold); }
@@ -423,6 +463,19 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .balancePill { height: 38px; min-width: 103px; padding-right: 11px; }
   .miniChip { width: 22px; height: 22px; }
   .iconButton { width: 38px; height: 38px; }
+  .achievementBanner { top: max(70px, calc(env(safe-area-inset-top) + 64px)); min-height: 94px; grid-template-columns: auto 1fr; gap: 12px; padding: 13px 15px; border-radius: 14px; }
+  .achievementMedallion { width: 52px; height: 52px; font-size: 16px; }
+  .achievementCopy small { font-size: 8px; }
+  .achievementCopy strong { font-size: clamp(24px, 8vw, 31px); }
+  .achievementCopy b { font-size: 9px; }
+  .achievementLaurel { display: none; }
+  .tableBustNotice { min-height: 155px; grid-template-columns: 76px 1fr; gap: 14px; padding: 20px 17px; border-radius: 15px; }
+  .bustedChipGraphic { width: 76px; height: 76px; border-width: 4px; }
+  .bustedChipGraphic > i { font-size: 28px; }
+  .bustedChipGraphic > b { left: 36px; top: -5px; height: 82px; }
+  .bustedChipGraphic::before, .bustedChipGraphic::after { width: 18px; height: 14px; right: -12px; }
+  .tableBustCopy strong { font-size: clamp(39px, 14vw, 54px); }
+  .tableBustCopy > b { font-size: 9px; }
   .welcomeScreen { min-height: calc(100dvh - 62px); justify-content: flex-start; padding-top: max(40px, 7vh); }
   .welcomeScreen h1 { font-size: 45px; }
   .welcomeCopy { font-size: 12px; max-width: 360px; margin-bottom: 22px; }
@@ -560,5 +613,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  .achievementBanner { opacity: 1; transform: translateX(-50%); animation: none !important; }
+  .tableBustNotice { opacity: 1; transform: translate(-50%, -50%); animation: none !important; }
   .sideBetCelebration { opacity: 1; transform: translate(-50%, -20px); animation: none !important; }
 }

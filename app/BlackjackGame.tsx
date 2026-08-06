@@ -99,8 +99,21 @@ const TABLES = [
   { id: "high-limit", name: "High limit", minimum: 1000, chips: [1000, 5000, 10000, 25000] },
 ] as const;
 const WALLET_KEY = "dealers-edge-token-balance";
-const RESET_BALANCE = 1000;
+const ACHIEVEMENTS_KEY = "dealers-edge-token-achievements-v2";
+const RESET_BALANCE = 500;
 const LOWEST_TABLE_MINIMUM = TABLES[0].minimum;
+const ACHIEVEMENT_THRESHOLDS = [
+  1000,
+  2500,
+  5000,
+  10000,
+  25000,
+  50000,
+  100000,
+  250000,
+  500000,
+  1000000,
+] as const;
 const EMPTY_SIDE_BETS: SideBets = {
   perfectPairs: 0,
   twentyOnePlusThree: 0,
@@ -462,6 +475,14 @@ export default function BlackjackGame() {
   const [homeNotice, setHomeNotice] = useState("");
   const [roomWager, setRoomWager] = useState(10);
   const [cardCountOpen, setCardCountOpen] = useState(false);
+  const [unlockedAchievements, setUnlockedAchievements] = useState<number[]>([]);
+  const [achievementsLoaded, setAchievementsLoaded] = useState(false);
+  const [achievementBanner, setAchievementBanner] = useState<number | null>(null);
+  const [tableBustNotice, setTableBustNotice] = useState<{
+    id: number;
+    balance: number;
+    minimum: number;
+  } | null>(null);
   const [sideBetCelebration, setSideBetCelebration] = useState<{
     id: number;
     outcomes: SideBetOutcome[];
@@ -469,6 +490,10 @@ export default function BlackjackGame() {
   const gameRef = useRef<GameState | null>(null);
   const soundEnabledRef = useRef(true);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const previousAchievementBalanceRef = useRef<number | null>(null);
+  const previousAchievementSourceRef = useRef("");
+  const achievementQueueRef = useRef<number[]>([]);
+  const lastTableBustRoundRef = useRef("");
   const activeRoomCode = roomSession?.code;
   const gameBankroll = game?.bankroll;
   const selectedTable = TABLES.find((table) => table.id === selectedTableId) ?? TABLES[0];
@@ -484,8 +509,27 @@ export default function BlackjackGame() {
         Number.isFinite(cachedBalance) && cachedBalance >= LOWEST_TABLE_MINIMUM
           ? cachedBalance
           : RESET_BALANCE;
+      let storedAchievements: number[] = [];
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem(ACHIEVEMENTS_KEY) ?? "[]");
+        if (Array.isArray(parsed)) {
+          storedAchievements = parsed.filter(
+            (value): value is number =>
+              typeof value === "number" &&
+              (ACHIEVEMENT_THRESHOLDS as readonly number[]).includes(value),
+          );
+        }
+      } catch {
+        // A malformed cache should not prevent the game from loading.
+      }
+      const initialAchievements = [...new Set(storedAchievements)];
       setWallet(startingBalance);
+      setUnlockedAchievements(initialAchievements);
+      setAchievementsLoaded(true);
+      previousAchievementBalanceRef.current = startingBalance;
+      previousAchievementSourceRef.current = "wallet";
       window.localStorage.setItem(WALLET_KEY, String(startingBalance));
+      window.localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(initialAchievements));
       setWalletLoaded(true);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -501,6 +545,11 @@ export default function BlackjackGame() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [gameBankroll, walletLoaded]);
+
+  useEffect(() => {
+    if (!achievementsLoaded) return;
+    window.localStorage.setItem(ACHIEVEMENTS_KEY, JSON.stringify(unlockedAchievements));
+  }, [achievementsLoaded, unlockedAchievements]);
 
   useEffect(() => {
     gameRef.current = game;
@@ -540,7 +589,7 @@ export default function BlackjackGame() {
     };
   }, [activeRoomCode]);
 
-  const playCardSound = useCallback((kind: "deal" | "flip" | "win" | "blackjack" | "lose" | "shuffle" | "chip") => {
+  const playCardSound = useCallback((kind: "deal" | "flip" | "win" | "blackjack" | "achievement" | "lose" | "shuffle" | "chip") => {
     if (!soundEnabledRef.current || typeof window === "undefined") return;
 
     const context = audioContextRef.current ?? new AudioContext();
@@ -589,6 +638,31 @@ export default function BlackjackGame() {
         gain.connect(context.destination);
         oscillator.start(start);
         oscillator.stop(start + 0.4);
+      });
+      return;
+    }
+
+    if (kind === "achievement") {
+      const start = context.currentTime;
+      const masterGain = context.createGain();
+      masterGain.gain.setValueAtTime(0.001, start);
+      masterGain.gain.exponentialRampToValueAtTime(0.085, start + 0.025);
+      masterGain.gain.exponentialRampToValueAtTime(0.001, start + 1.05);
+      masterGain.connect(context.destination);
+
+      [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const noteStart = start + index * 0.11;
+        oscillator.type = index < 3 ? "triangle" : "sine";
+        oscillator.frequency.setValueAtTime(frequency, noteStart);
+        gain.gain.setValueAtTime(0.001, noteStart);
+        gain.gain.exponentialRampToValueAtTime(index === 4 ? 0.7 : 0.42, noteStart + 0.018);
+        gain.gain.exponentialRampToValueAtTime(0.001, noteStart + 0.5);
+        oscillator.connect(gain);
+        gain.connect(masterGain);
+        oscillator.start(noteStart);
+        oscillator.stop(noteStart + 0.52);
       });
       return;
     }
@@ -676,6 +750,17 @@ export default function BlackjackGame() {
     gain.connect(context.destination);
     source.start();
   }, []);
+
+  const showTableBust = useCallback((balance: number, minimum: number) => {
+    setTableBustNotice({ id: Date.now(), balance, minimum });
+    playCardSound("lose");
+  }, [playCardSound]);
+
+  useEffect(() => {
+    if (!tableBustNotice) return;
+    const timer = window.setTimeout(() => setTableBustNotice(null), 3300);
+    return () => window.clearTimeout(timer);
+  }, [tableBustNotice]);
 
   const dealerSequenceKey = game?.phase === "dealerTurn" ? game.round : null;
 
@@ -790,10 +875,88 @@ export default function BlackjackGame() {
   const isRoomTurn = Boolean(
     roomSession && roomSession.room.currentPlayerId === roomSession.seatId,
   );
+  const achievementBalance = roomPlayer?.bankroll ?? game?.bankroll ?? wallet;
+  const achievementSource = roomPlayer
+    ? `room:${roomSession?.code}:${roomPlayer.id}`
+    : game
+      ? "solo"
+      : "wallet";
+  const completedTableBustKey = roomPlayer && roomSession?.room.phase === "settled"
+    ? `room:${roomSession.code}:${roomPlayer.id}:${roomSession.room.round}`
+    : game?.phase === "settled"
+      ? `solo:${game.round}`
+      : null;
+  const completedTableBalance = roomPlayer?.bankroll ?? game?.bankroll ?? wallet;
+  const completedTableMinimum = roomSession?.room.table.minimum ?? selectedTable.minimum;
+
+  useEffect(() => {
+    if (!walletLoaded || !achievementsLoaded) return;
+
+    if (previousAchievementSourceRef.current !== achievementSource) {
+      previousAchievementSourceRef.current = achievementSource;
+      previousAchievementBalanceRef.current = achievementBalance;
+      return;
+    }
+
+    const previousBalance = previousAchievementBalanceRef.current;
+    previousAchievementBalanceRef.current = achievementBalance;
+    if (previousBalance === null || achievementBalance <= previousBalance) return;
+
+    const newlyUnlocked = ACHIEVEMENT_THRESHOLDS.filter(
+      (threshold) =>
+        previousBalance < threshold &&
+        achievementBalance >= threshold &&
+        !unlockedAchievements.includes(threshold),
+    );
+    if (!newlyUnlocked.length) return;
+
+    setUnlockedAchievements((current) =>
+      [...new Set([...current, ...newlyUnlocked])].sort((left, right) => left - right),
+    );
+    achievementQueueRef.current.push(...newlyUnlocked);
+    if (achievementBanner === null) {
+      const nextAchievement = achievementQueueRef.current.shift() ?? null;
+      setAchievementBanner(nextAchievement);
+      if (nextAchievement !== null) playCardSound("achievement");
+    }
+  }, [
+    achievementBalance,
+    achievementBanner,
+    achievementSource,
+    achievementsLoaded,
+    playCardSound,
+    unlockedAchievements,
+    walletLoaded,
+  ]);
+
+  useEffect(() => {
+    if (achievementBanner === null) return;
+    const timer = window.setTimeout(() => {
+      const nextAchievement = achievementQueueRef.current.shift() ?? null;
+      setAchievementBanner(nextAchievement);
+      if (nextAchievement !== null) playCardSound("achievement");
+    }, 3800);
+    return () => window.clearTimeout(timer);
+  }, [achievementBanner, playCardSound]);
+
+  useEffect(() => {
+    if (!completedTableBustKey || lastTableBustRoundRef.current === completedTableBustKey) return;
+    lastTableBustRoundRef.current = completedTableBustKey;
+    if (completedTableBalance >= completedTableMinimum) return;
+    const timer = window.setTimeout(() => {
+      showTableBust(completedTableBalance, completedTableMinimum);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [
+    completedTableBalance,
+    completedTableBustKey,
+    completedTableMinimum,
+    showTableBust,
+  ]);
 
   function startSession() {
     if (wallet < selectedTable.minimum) {
-      playCardSound("lose");
+      showTableBust(wallet, selectedTable.minimum);
       setHomeNotice(
         `${selectedTable.name} requires ${tokenAmount(selectedTable.minimum)} tokens. Your balance is ${tokenAmount(wallet)}.`,
       );
@@ -1343,6 +1506,42 @@ export default function BlackjackGame() {
 
   return (
     <main className="gameShell">
+      {achievementBanner !== null ? (
+        <section
+          className="achievementBanner"
+          key={achievementBanner}
+          role="status"
+          aria-live="assertive"
+        >
+          <span className="achievementMedallion" aria-hidden="true">★</span>
+          <span className="achievementCopy">
+            <small>Achievement unlocked</small>
+            <strong>{tokenAmount(achievementBanner)} tokens</strong>
+            <b>New bankroll milestone</b>
+          </span>
+          <span className="achievementLaurel" aria-hidden="true">◆</span>
+        </section>
+      ) : null}
+      {tableBustNotice ? (
+        <section
+          className="tableBustNotice"
+          key={tableBustNotice.id}
+          role="alert"
+          aria-live="assertive"
+        >
+          <span className="bustedChipGraphic" aria-hidden="true">
+            <i>◎</i>
+            <b />
+          </span>
+          <span className="tableBustCopy">
+            <small>Table minimum missed</small>
+            <strong>BUSTED</strong>
+            <b>
+              {tokenAmount(tableBustNotice.balance)} tokens left · {tokenAmount(tableBustNotice.minimum)} required
+            </b>
+          </span>
+        </section>
+      ) : null}
       {sideBetCelebration ? (
         <div
           className="sideBetCelebration"
