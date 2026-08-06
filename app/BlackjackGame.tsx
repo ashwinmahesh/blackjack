@@ -95,6 +95,8 @@ const TABLES = [
   { id: "high-limit", name: "High limit", minimum: 1000, chips: [1000, 5000, 10000, 25000] },
 ] as const;
 const WALLET_KEY = "dealers-edge-token-balance";
+const RESET_BALANCE = 1000;
+const LOWEST_TABLE_MINIMUM = TABLES[0].minimum;
 const EMPTY_SIDE_BETS: SideBets = {
   perfectPairs: 0,
   twentyOnePlusThree: 0,
@@ -374,7 +376,7 @@ function ChipPile({ amount, denominations }: { amount: number; denominations: re
 }
 
 export default function BlackjackGame() {
-  const [wallet, setWallet] = useState(1000);
+  const [wallet, setWallet] = useState(RESET_BALANCE);
   const [walletLoaded, setWalletLoaded] = useState(false);
   const [selectedTableId, setSelectedTableId] = useState<string>(TABLES[0].id);
   const [game, setGame] = useState<GameState | null>(null);
@@ -400,7 +402,10 @@ export default function BlackjackGame() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const cachedBalance = Number(window.localStorage.getItem(WALLET_KEY));
-      const startingBalance = Number.isFinite(cachedBalance) && cachedBalance > 0 ? cachedBalance : 1000;
+      const startingBalance =
+        Number.isFinite(cachedBalance) && cachedBalance >= LOWEST_TABLE_MINIMUM
+          ? cachedBalance
+          : RESET_BALANCE;
       setWallet(startingBalance);
       window.localStorage.setItem(WALLET_KEY, String(startingBalance));
       setWalletLoaded(true);
@@ -411,7 +416,8 @@ export default function BlackjackGame() {
   useEffect(() => {
     if (!walletLoaded || gameBankroll === undefined) return;
     const timer = window.setTimeout(() => {
-      const savedBalance = gameBankroll > 0 ? gameBankroll : 1000;
+      const savedBalance =
+        gameBankroll >= LOWEST_TABLE_MINIMUM ? gameBankroll : RESET_BALANCE;
       setWallet(savedBalance);
       window.localStorage.setItem(WALLET_KEY, String(savedBalance));
     }, 0);
@@ -643,7 +649,8 @@ export default function BlackjackGame() {
       return;
     }
     setHomeNotice("");
-    const startingBalance = wallet > 0 ? wallet : 1000;
+    const startingBalance =
+      wallet >= LOWEST_TABLE_MINIMUM ? wallet : RESET_BALANCE;
     setGame({
       bankroll: startingBalance,
       startingBankroll: startingBalance,

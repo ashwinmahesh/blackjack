@@ -2,24 +2,44 @@
 
 A mobile-first, four-deck blackjack game built with Next.js. The app uses practice tokens only and supports persistent device-local balances, four table-stakes tiers, hit, stand, double, one equal-value split per hand (including mixed 10/J/Q/K pairs), late surrender, and Perfect Pairs, 21+3, and Match the Dealer side bets.
 
-## Run locally
+## Quick start
 
 Requires Node.js 22 or newer.
 
+Install dependencies and start the development server:
+
 ```bash
-npm ci
-npm run dev
+npm ci && npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+Stop the server with `Ctrl+C`.
+
+## Run the production build locally
+
+Build and start the same Next.js server used by the container:
+
+```bash
+npm ci
+npm run build
+npm start -- -H 0.0.0.0 -p 8081
+```
+
+Open [http://localhost:8081](http://localhost:8081). Check backend health at [http://localhost:8081/api/health](http://localhost:8081/api/health).
+
+## Validate changes
+
+```bash
+npm run lint && npm run build
+```
 
 ## Production image
 
 The multi-stage image contains the standalone Next.js server, the frontend assets, and API routes in one small runtime image. It listens on `0.0.0.0` and honors Cloud Run's `PORT` variable (default `8080`).
 
 ```bash
-npm run docker:build
-npm run docker:run
+npm run docker:build && npm run docker:run
 ```
 
 Check the app at [http://localhost:8080](http://localhost:8080) and the backend health endpoint at [http://localhost:8080/api/health](http://localhost:8080/api/health).
@@ -58,7 +78,7 @@ For a private service, omit `--allow-unauthenticated`. Configure the Cloud Run s
 
 ## Architecture
 
-Solo game state is device-local and resets when the page reloads. The same container now includes the first server-authoritative multiplayer layer:
+The token balance is persisted in browser storage, while an unfinished solo round resets when the page reloads. The same container includes the server-authoritative multiplayer layer:
 
 - `POST /api/rooms` creates a protected five-seat room and a server-owned four-deck shoe.
 - `POST /api/rooms/:code/join` validates the passcode and assigns a private player session token.
