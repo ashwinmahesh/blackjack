@@ -1,0 +1,483 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #f3efe4;
+  --muted: #9eaca2;
+  --gold: #d4ae62;
+  --gold-bright: #f0d18f;
+  --felt: #0c3a2d;
+  --deep: #061510;
+  --panel: #0b211a;
+  --line: rgba(227, 204, 147, 0.18);
+}
+
+* { box-sizing: border-box; }
+
+html, body { min-height: 100%; }
+
+body {
+  margin: 0;
+  background: #06130f;
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button { color: inherit; font: inherit; }
+button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
+
+.gameShell {
+  min-height: 100dvh;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(31, 116, 82, 0.25), transparent 40%),
+    linear-gradient(145deg, #071912 0%, #05100d 100%);
+}
+
+.gameShell::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .12;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
+  z-index: 20;
+}
+
+.topBar {
+  height: 74px;
+  padding: 0 clamp(18px, 3vw, 46px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  background: rgba(4, 16, 12, .78);
+  backdrop-filter: blur(18px);
+  position: relative;
+  z-index: 30;
+}
+
+.brand { display: flex; align-items: center; gap: 11px; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.brandMark { width: 37px; height: 37px; display: grid; place-items: center; border: 1px solid rgba(212,174,98,.6); transform: rotate(45deg); border-radius: 8px; background: linear-gradient(145deg, rgba(212,174,98,.13), transparent); }
+.brandMark span { color: var(--gold); font-size: 13px; transform: rotate(-45deg); }
+.brandWords { display: flex; flex-direction: column; line-height: 1; }
+.brandWords strong { font-family: Georgia, "Times New Roman", serif; font-size: 19px; font-weight: 500; letter-spacing: .01em; }
+.brandWords small { color: var(--gold); font-size: 8px; text-transform: uppercase; letter-spacing: .3em; margin-top: 6px; }
+.topActions { display: flex; align-items: center; gap: 11px; }
+.iconButton { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.1); border-radius: 50%; background: rgba(255,255,255,.035); cursor: pointer; }
+.iconButton svg { width: 19px; fill: none; stroke: #b7c1bb; stroke-width: 1.5; stroke-linecap: round; }
+.balancePill { min-width: 128px; height: 44px; padding: 0 15px 0 10px; display: flex; align-items: center; gap: 9px; border: 1px solid rgba(212,174,98,.2); border-radius: 30px; background: rgba(12, 42, 31, .78); }
+.balancePill > span:last-child { display: flex; flex-direction: column; line-height: 1; }
+.balancePill small { color: #9eb0a6; text-transform: uppercase; font-size: 9px; letter-spacing: .13em; margin-bottom: 4px; }
+.balancePill strong { font-size: 17px; color: #f8f1de; font-variant-numeric: tabular-nums; }
+.miniChip { width: 26px; height: 26px; display: grid; place-items: center; color: var(--gold); border: 1px dashed var(--gold); border-radius: 50%; }
+
+.welcomeScreen {
+  min-height: calc(100dvh - 74px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 42px 20px 30px;
+  position: relative;
+  z-index: 2;
+}
+
+.welcomeScreen::before {
+  content: ""; position: absolute; width: min(760px, 94vw); height: min(760px, 76vh); border: 1px solid rgba(212,174,98,.08); border-radius: 50%; z-index: -1;
+  background: radial-gradient(circle, rgba(22,88,62,.2) 0%, rgba(6,21,16,0) 67%);
+  box-shadow: 0 0 0 52px rgba(212,174,98,.015), 0 0 0 108px rgba(212,174,98,.01);
+}
+
+.welcomeEyebrow { color: #b7c6bc; text-transform: uppercase; font-size: 9px; letter-spacing: .3em; display: flex; align-items: center; gap: 9px; }
+.welcomeEyebrow span { width: 22px; height: 1px; background: var(--gold); }
+.welcomeMark { color: rgba(212,174,98,.72); margin: 13px 0 5px; font-size: 21px; text-shadow: 0 0 22px rgba(212,174,98,.36); }
+.welcomeScreen h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(42px, 7vw, 74px); line-height: .98; font-weight: 400; letter-spacing: -.045em; }
+.welcomeCopy { max-width: 490px; margin: 16px auto 27px; color: #aab8af; font-size: 14px; line-height: 1.7; text-align: center; }
+
+.buyInCard { width: min(640px, 100%); border: 1px solid rgba(212,174,98,.18); background: linear-gradient(145deg, rgba(15,49,37,.94), rgba(7,28,21,.95)); border-radius: 19px; padding: 20px; box-shadow: 0 28px 80px rgba(0,0,0,.32), inset 0 1px rgba(255,255,255,.04); }
+.buyInHeading { display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px 15px; }
+.buyInHeading span { font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: #d9dfdb; }
+.buyInHeading small { font-size: 10px; color: #72877b; }
+.bankrollOptions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.bankrollOptions button { height: 92px; border: 1px solid rgba(255,255,255,.075); border-radius: 12px; background: rgba(2,15,11,.45); color: #82968b; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: .2s ease; }
+.bankrollOptions button:hover { background: rgba(255,255,255,.045); transform: translateY(-2px); }
+.bankrollOptions button.selected { color: #f6eedc; border-color: rgba(212,174,98,.56); background: rgba(212,174,98,.085); box-shadow: inset 0 0 0 1px rgba(212,174,98,.1); }
+.bankrollOptions button > span:last-child { font-size: 11px; font-weight: 600; }
+.stakeTableOptions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.stakeTableOptions > button { min-height: 91px; padding: 12px; display: flex; flex-direction: column; gap: 10px; border: 1px solid rgba(255,255,255,.075); border-radius: 12px; background: rgba(2,15,11,.45); color: #91a399; cursor: pointer; text-align: left; transition: .2s ease; }
+.stakeTableOptions > button:hover { transform: translateY(-2px); background: rgba(255,255,255,.045); }
+.stakeTableOptions > button.selected { border-color: rgba(212,174,98,.58); background: rgba(212,174,98,.09); box-shadow: inset 0 0 0 1px rgba(212,174,98,.1); }
+.stakeTableHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.stakeTableHeading strong { color: #edf0ed; font-size: 14px; }
+.stakeTableHeading small { color: #91a399; font-size: 10px; }
+.stakeChips { display: flex; gap: 6px; }
+.stakeChip { --stake-chip: #6e8e7d; width: 38px; height: 26px; display: grid; place-items: center; border: 2px dashed rgba(255,255,255,.67); border-radius: 50%; background: var(--stake-chip); color: white; box-shadow: inset 0 0 0 2px rgba(4,18,14,.35); font-size: 7px; font-style: normal; font-weight: 800; }
+.stakeChip2 { --stake-chip: #a9665e; }
+.stakeChip3 { --stake-chip: #596f9a; }
+.stakeChip4 { --stake-chip: #8e6c9b; }
+.chipGraphic { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; position: relative; border: 3px dashed rgba(255,255,255,.65); box-shadow: inset 0 0 0 3px currentColor, 0 5px 10px rgba(0,0,0,.2); }
+.chipGraphic i { position: absolute; inset: 7px; border-radius: 50%; background: rgba(3,15,11,.8); border: 1px solid rgba(255,255,255,.24); }
+.chipGraphic b { position: relative; z-index: 2; color: white; font-size: 9px; }
+.chip500 { color: #477d68; background: #477d68; }
+.chip1000 { color: #aa7345; background: #aa7345; }
+.chip2500 { color: #7b5b92; background: #7b5b92; }
+.chip5000 { color: #994f4f; background: #994f4f; }
+.takeSeatButton, .dealButton { border: 1px solid #e1bf79; background: linear-gradient(180deg, #d5af64, #b88d46); color: #10271f; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; font-size: 13px; border-radius: 10px; cursor: pointer; box-shadow: 0 8px 22px rgba(0,0,0,.2), inset 0 1px rgba(255,255,255,.35); }
+.takeSeatButton { width: 100%; height: 48px; margin-top: 12px; }
+.takeSeatButton span, .dealButton span { font-size: 17px; margin-left: 9px; }
+.takeSeatButton:hover, .dealButton:hover { filter: brightness(1.08); }
+.takeSeatButton:disabled { opacity: .42; cursor: not-allowed; filter: grayscale(.5); }
+.tableBalanceWarning { margin-top: 10px; padding: 9px 11px; border-radius: 8px; background: rgba(176,77,68,.13); color: #efaaa2; font-size: 12px; text-align: center; }
+.tableFacts { margin-top: 26px; display: flex; align-items: center; gap: 16px; color: #74877c; text-transform: uppercase; font-size: 8px; letter-spacing: .16em; }
+.tableFacts b { color: #c6d0ca; margin-right: 4px; }
+.tableFacts i { width: 3px; height: 3px; background: #486155; border-radius: 50%; }
+.roomsNote { margin-top: 19px; color: #64786d; font-size: 9px; text-transform: uppercase; letter-spacing: .13em; }
+.roomsNote i { margin: 0 7px; }
+.statusDot { display: inline-block; width: 6px; height: 6px; background: #65b584; border-radius: 50%; margin-right: 6px; box-shadow: 0 0 9px #65b584; }
+.roomEntryActions { margin-top: 19px; display: flex; gap: 9px; }
+.roomEntryActions button { height: 45px; padding: 0 16px; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(212,174,98,.2); border-radius: 10px; background: rgba(13,45,34,.7); color: #d9e0dc; cursor: pointer; }
+.roomEntryActions button:hover { border-color: rgba(212,174,98,.48); background: rgba(212,174,98,.08); }
+.roomEntryActions button span { color: var(--gold); font-size: 17px; }
+.roomEntryActions button strong { font-size: 12px; }
+
+.roomLobbyScreen { min-height: calc(100dvh - 74px); display: grid; place-items: center; padding: 34px 18px; position: relative; z-index: 2; }
+.roomLobbyCard { width: min(760px, 100%); padding: 30px; border: 1px solid rgba(212,174,98,.2); border-radius: 22px; background: linear-gradient(145deg, rgba(15,49,37,.96), rgba(7,28,21,.97)); box-shadow: 0 28px 90px rgba(0,0,0,.36); text-align: center; }
+.roomLobbyCard > h1 { margin: 12px 0 4px; font: 400 clamp(35px, 6vw, 55px)/1 Georgia, serif; }
+.roomLobbyCard > p { margin: 0 0 20px; color: #a9b8b0; font-size: 14px; }
+.roomCodeDisplay { min-width: 220px; margin-bottom: 22px; padding: 11px 18px; display: inline-grid; grid-template-columns: 1fr auto; column-gap: 12px; border: 1px solid rgba(212,174,98,.35); border-radius: 12px; background: rgba(3,17,12,.55); color: #eff1ed; cursor: pointer; text-align: left; }
+.roomCodeDisplay small { grid-column: 1; color: #91a49a; font-size: 9px; text-transform: uppercase; letter-spacing: .14em; }
+.roomCodeDisplay strong { grid-column: 1; margin-top: 3px; color: #f0d18f; font: 500 24px/1 Georgia, serif; letter-spacing: .22em; }
+.roomCodeDisplay span { grid-column: 2; grid-row: 1 / span 2; align-self: center; color: #9dafa4; font-size: 10px; text-transform: uppercase; }
+.seatGrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.roomSeat { min-height: 145px; position: relative; padding: 18px 7px 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px dashed rgba(255,255,255,.1); border-radius: 13px; color: #697e72; }
+.roomSeat.occupied { border-style: solid; border-color: rgba(212,174,98,.18); background: rgba(255,255,255,.025); color: #e7ebe8; }
+.seatNumber { position: absolute; top: 8px; left: 10px; color: #61766a; font-size: 9px; }
+.playerAvatar, .emptySeat { width: 43px; height: 43px; margin-bottom: 9px; display: grid; place-items: center; border-radius: 50%; background: rgba(212,174,98,.13); color: var(--gold-bright); font: 500 18px Georgia, serif; }
+.emptySeat { background: rgba(255,255,255,.025); color: #5d7266; }
+.roomSeat strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.roomSeat small { margin-top: 4px; color: #7e9287; font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
+.roomSeat > i { position: absolute; top: 9px; right: 9px; width: 7px; height: 7px; border-radius: 50%; background: #66776e; }
+.roomSeat > i.ready { background: #69c48b; box-shadow: 0 0 8px rgba(105,196,139,.7); }
+.roomLobbyActions { margin-top: 17px; display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
+.roomLobbyActions .takeSeatButton { width: 170px; margin: 0; }
+.roomLobbyActions .startRoomButton { background: linear-gradient(180deg, #efd18b, #ca9c51); }
+.multiplayerStatus { margin-top: 17px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,.07); color: #a8b7af; font-size: 11px; }
+.multiplayerStatus small { display: block; margin-top: 6px; color: #71857a; }
+.multiplayerStatus .roomErrorText { color: #ee9f96; }
+
+.roomGameScreen { min-height: calc(100dvh - 74px); padding: 17px clamp(12px, 3vw, 42px) 18px; display: grid; grid-template-rows: auto minmax(150px, .8fr) auto minmax(185px, 1fr) auto; gap: 8px; background: radial-gradient(ellipse at 50% 40%, rgba(38,121,87,.3), transparent 50%), #092b21; }
+.roomGameTopline { display: flex; align-items: center; justify-content: space-between; color: #91a69a; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; }
+.roomGameTopline strong { color: #d3ddd7; }
+.roomDealerArea { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 0; }
+.roomGameMessage { justify-self: center; padding: 8px 21px; border: 1px solid rgba(255,255,255,.1); border-radius: 22px; background: rgba(4,18,14,.74); color: #fffdf8; font: 18px Georgia, serif; }
+.roomPlayerRail { display: flex; align-items: stretch; justify-content: center; gap: 8px; overflow-x: auto; padding: 5px 2px 9px; }
+.roomPlayerHand { min-width: 170px; position: relative; padding: 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 13px; background: rgba(4,20,15,.5); }
+.roomPlayerHand.active { border-color: rgba(212,174,98,.72); box-shadow: 0 0 0 2px rgba(212,174,98,.1), 0 10px 24px rgba(0,0,0,.18); }
+.roomPlayerHand.current { background: rgba(212,174,98,.055); }
+.roomPlayerHand > header { display: flex; justify-content: space-between; align-items: center; gap: 7px; }
+.roomPlayerHand > header strong { max-width: 105px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e5eae7; font-size: 12px; }
+.roomPlayerHand > header span { color: #d1b978; font-size: 10px; }
+.roomHands { display: flex; align-items: flex-start; justify-content: center; gap: 5px; margin-top: 9px; }
+.roomHand { display: flex; flex-direction: column; align-items: center; position: relative; }
+.miniCardFan { min-height: 87px; display: flex; align-items: center; padding-left: 11px; }
+.miniCardFan .playingCard { width: 56px; margin-left: -11px; border-radius: 5px; }
+.miniCardFan .cardCorner { top: 4px; left: 5px; }
+.miniCardFan .cardCorner strong { font-size: 11px; }
+.miniCardFan .cardCorner span { font-size: 8px; }
+.miniCardFan .bottomCorner { left: auto; right: 5px; top: auto; bottom: 4px; }
+.miniCardFan .cardSuit { font-size: 23px; }
+.roomHand small { color: #aab8b0; font-size: 9px; }
+.roomHand > b { position: absolute; top: 42px; padding: 4px 6px; border: 1px solid var(--gold); border-radius: 4px; background: #0b211a; color: var(--gold-bright); font-size: 8px; letter-spacing: .08em; }
+.roomHand > b.bust { border-color: #e06c60; color: #ffbbb2; }
+.roomWaiting { min-height: 102px; display: grid; place-items: center; color: #81958a; font-size: 11px; }
+.roomGameControls { width: min(760px, 100%); min-height: 72px; justify-self: center; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 15px; background: rgba(4,18,14,.9); }
+.roomGameControls > strong { color: #c6d1ca; font-size: 13px; }
+.roomWagerPicker { display: flex; gap: 5px; }
+.roomWagerPicker button { height: 38px; padding: 0 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: rgba(255,255,255,.04); color: #c5d0ca; font-size: 10px; cursor: pointer; }
+.roomGameControls .dealButton { margin: 0; }
+.roomPlayControls { border: 0; background: none; box-shadow: none; padding: 0; }
+.roomControlError { color: #f0a29a; font-size: 11px; }
+
+.tableScreen {
+  min-height: calc(100dvh - 74px);
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(170px, 1fr) auto minmax(205px, 1.22fr) auto;
+  padding: 16px clamp(16px, 4vw, 60px) 18px;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(32,110,78,.28), transparent 48%),
+    linear-gradient(90deg, rgba(0,0,0,.2), transparent 25%, transparent 75%, rgba(0,0,0,.2)),
+    #0a2b21;
+  isolation: isolate;
+}
+.tableScreen::before { content: ""; position: absolute; inset: 0; z-index: -1; background: repeating-linear-gradient(112deg, rgba(255,255,255,.006) 0 1px, transparent 1px 5px); }
+.tableRail { position: absolute; left: 8%; right: 8%; top: 34px; height: 70%; border: 1px solid rgba(212,174,98,.14); border-top: 0; border-radius: 0 0 48% 48%; pointer-events: none; }
+.tableRail::before { content: ""; position: absolute; inset: 12px; border: 1px solid rgba(212,174,98,.07); border-top: 0; border-radius: inherit; }
+.tableMeta { display: flex; align-items: flex-start; justify-content: space-between; z-index: 2; }
+.shoeLabel { display: grid; grid-template-columns: 28px auto; column-gap: 8px; align-items: center; }
+.shoeLabel svg { grid-row: span 2; width: 25px; fill: none; stroke: #758c7f; stroke-width: 1.3; }
+.shoeLabel span { display: flex; flex-direction: column; }
+.shoeLabel strong, .roundLabel { font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: #c2cec7; }
+.shoeLabel small { font-size: 12px; color: #8ea197; margin-top: 4px; }
+.shoeLabel > i { grid-column: 2; margin-top: 7px; width: 110px; height: 4px; position: relative; border-radius: 5px; background: rgba(255,255,255,.1); }
+.shoeLabel > i b { display: block; height: 100%; background: var(--gold); }
+.shoeLabel > i em { position: absolute; top: -4px; width: 3px; height: 12px; transform: translateX(-50%); border-radius: 2px; background: #be5c52; box-shadow: 0 0 0 2px rgba(190,92,82,.15); }
+.shoeLabel > i em.reached { background: #ef786b; box-shadow: 0 0 10px rgba(239,120,107,.8); animation: cutMarkerPulse .8s ease-in-out infinite alternate; }
+@keyframes cutMarkerPulse { to { transform: translateX(-50%) scaleY(1.25); } }
+.roundLabel { color: #61766b; padding-top: 5px; }
+
+.dealerZone, .playerZone { display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; z-index: 2; min-height: 0; }
+.zoneLabel { min-height: 31px; display: flex; align-items: center; justify-content: center; gap: 9px; color: #c0ccc5; text-transform: uppercase; font-size: 15px; font-weight: 700; letter-spacing: .11em; margin-bottom: 8px; }
+.handValue { min-width: 40px; height: 29px; padding: 0 6px; display: flex; align-items: center; justify-content: center; gap: 3px; background: rgba(3,14,11,.7); border: 1px solid rgba(255,255,255,.15); color: #fffdf7; border-radius: 9px; font-size: 17px; font-weight: 750; letter-spacing: 0; }
+.handValue small { font-size: 9px; color: #bdc9c2; text-transform: uppercase; }
+.cardFan { min-height: 132px; display: flex; justify-content: center; align-items: center; padding-left: 17px; }
+.cardFan .playingCard { margin-left: -17px; }
+.playingCard { width: clamp(74px, 7vw, 91px); aspect-ratio: .69; position: relative; border-radius: 8px; box-shadow: 0 10px 19px rgba(0,0,0,.29), 0 2px 3px rgba(0,0,0,.35); backface-visibility: hidden; animation: cardIn .42s cubic-bezier(.18,.78,.28,1) both; will-change: transform, opacity; }
+.dealerCards .playingCard { animation-name: dealToDealer; }
+.playerZone .playingCard { animation-name: dealToPlayer; }
+.playingCard.cardReveal { transform-origin: 50% 50%; animation: flipReveal .56s cubic-bezier(.3,.7,.2,1) both; }
+.splitHands .playerHand:nth-child(2) .playingCard:last-child { animation-delay: .14s; }
+@keyframes cardIn { from { opacity: 0; transform: translateY(-18px) rotate(-2deg); } to { opacity: 1; transform: none; } }
+@keyframes dealToDealer { from { opacity: .25; transform: translate(150px, -70px) rotate(10deg) scale(.92); } to { opacity: 1; transform: none; } }
+@keyframes dealToPlayer { from { opacity: .25; transform: translate(165px, -180px) rotate(13deg) scale(.92); } to { opacity: 1; transform: none; } }
+@keyframes flipReveal { 0% { opacity: .5; transform: perspective(500px) rotateY(-90deg) scale(.96); } 60% { transform: perspective(500px) rotateY(8deg) scale(1.02); } 100% { opacity: 1; transform: perspective(500px) rotateY(0) scale(1); } }
+.cardFace { background: linear-gradient(140deg, #fffef9, #e9e6dd); color: #151a17; border: 1px solid rgba(0,0,0,.14); }
+.redCard { color: #b73f3f; }
+.cardCorner { position: absolute; top: 7px; left: 8px; display: flex; flex-direction: column; align-items: center; font-family: Georgia, serif; line-height: .85; }
+.cardCorner strong { font-size: clamp(15px, 1.5vw, 19px); }
+.cardCorner span { font-size: 11px; margin-top: 3px; }
+.bottomCorner { top: auto; left: auto; right: 8px; bottom: 7px; transform: rotate(180deg); }
+.cardSuit { position: absolute; inset: 0; display: grid; place-items: center; font-size: clamp(30px, 3.6vw, 44px); font-family: Georgia, serif; }
+.cardBack { padding: 5px; border: 1px solid #d2c7a4; background: #ede7d3; }
+.backFrame { width: 100%; height: 100%; display: grid; place-items: center; border: 2px solid #123d31; border-radius: 5px; color: #d2b269; font-family: Georgia, serif; font-size: 12px; background-color: #0d3328; background-image: repeating-linear-gradient(45deg, transparent 0 5px, rgba(212,174,98,.13) 5px 6px), repeating-linear-gradient(-45deg, transparent 0 5px, rgba(212,174,98,.1) 5px 6px); }
+.backFrame span { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(212,174,98,.7); transform: rotate(45deg); }
+.emptyDealerMark { width: 78px; height: 111px; display: grid; place-items: center; border: 1px dashed rgba(212,174,98,.15); border-radius: 9px; color: rgba(212,174,98,.2); }
+.emptyDealerMark span { font-size: 19px; }
+
+.gameMessage { z-index: 3; align-self: center; justify-self: center; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 9px 27px; border: 1px solid rgba(255,255,255,.1); border-radius: 24px; background: rgba(4,18,14,.8); backdrop-filter: blur(8px); color: #fffdf8; font-family: Georgia, serif; font-size: 20px; letter-spacing: .01em; }
+.gameMessage small { color: #acbab2; font-family: Inter, sans-serif; font-size: 11px; font-weight: 650; letter-spacing: .12em; margin-top: 4px; }
+.gameMessage.win { color: #f1d690; border-color: rgba(212,174,98,.3); }
+.gameMessage.loss { color: #caa6a0; }
+.sideResults { display: flex; gap: 5px; margin-top: 6px; font-family: Inter, sans-serif; }
+.sideResults > span { padding: 5px 9px; border-radius: 13px; background: rgba(255,255,255,.05); color: #aebcb4; font-size: 11px; letter-spacing: .015em; white-space: nowrap; }
+.sideResults > span b { margin-right: 3px; font-weight: 700; }
+.sideResults > span.hit { color: #efd18d; background: rgba(212,174,98,.1); }
+.cutCardAlert { display: flex; align-items: center; gap: 7px; margin-top: 7px; color: #ffc0b5; font: 700 11px/1.2 Inter, sans-serif; text-transform: uppercase; letter-spacing: .07em; }
+.cutCardAlert i { width: 7px; height: 14px; border-radius: 2px; background: #dc695d; box-shadow: 0 0 10px rgba(220,105,93,.55); }
+
+.playerZone { flex-direction: row; gap: clamp(20px, 8vw, 110px); align-items: flex-start; padding-top: 9px; }
+.playerHand { min-width: 100px; position: relative; display: flex; flex-direction: column; align-items: center; transition: .2s ease; }
+.playerHand.active { filter: drop-shadow(0 10px 14px rgba(212,174,98,.12)); }
+.playerHand.active::before { content: ""; position: absolute; inset: 25px -19px 15px; border: 1px solid rgba(212,174,98,.24); border-radius: 16px; z-index: -1; }
+.playerLabel { margin-bottom: 3px; }
+.handBet { margin-top: 7px; color: #e0e6e2; font-size: 15px; font-weight: 700; }
+.handBet span { color: var(--gold); }
+.resultTag { position: absolute; top: 55%; left: 50%; transform: translate(-50%, -50%) rotate(-4deg); white-space: nowrap; padding: 7px 11px; background: #0b211a; border: 1px solid var(--gold); border-radius: 5px; color: var(--gold-bright); font-size: 13px; font-weight: 800; letter-spacing: .1em; box-shadow: 0 6px 12px rgba(0,0,0,.3); z-index: 4; }
+.resultTag.lost { border-color: #a36b63; color: #d0a29b; }
+.resultTag.push { border-color: #819389; color: #bec7c1; }
+.resultTag.bustTag { padding: 10px 18px; border: 2px solid #e46f61; background: rgba(68,18,14,.94); color: #ffd0c8; font-size: 22px; letter-spacing: .18em; box-shadow: 0 0 0 5px rgba(228,111,97,.1), 0 10px 25px rgba(0,0,0,.42); animation: bustStamp .34s cubic-bezier(.2,1.45,.45,1) both; }
+@keyframes bustStamp { from { opacity: 0; transform: translate(-50%, -50%) rotate(-12deg) scale(1.65); } to { opacity: 1; transform: translate(-50%, -50%) rotate(-4deg) scale(1); } }
+.betSpot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; height: 100%; }
+.betSpotRing { width: 150px; height: 150px; border: 1px solid rgba(212,174,98,.28); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(212,174,98,.09), transparent 68%); box-shadow: 0 0 0 5px rgba(212,174,98,.025), inset 0 0 24px rgba(0,0,0,.14); }
+.betSpotRing span, .betSpotRing small { color: #b2c0b8; text-transform: uppercase; font-size: 12px; font-weight: 700; letter-spacing: .1em; }
+.betSpotRing strong { font-family: Georgia, serif; font-size: 34px; font-weight: 400; color: #fff6e2; margin: 3px 0; font-variant-numeric: tabular-nums; }
+.shuffleVisual { width: 180px; height: 138px; position: relative; display: grid; place-items: end center; padding-bottom: 3px; }
+.shuffleVisual span { position: absolute; top: 13px; width: 73px; height: 101px; border: 4px solid #e9e2cc; border-radius: 8px; background: repeating-linear-gradient(45deg, #0d382b 0 6px, #1a4b3b 6px 8px); box-shadow: 0 10px 17px rgba(0,0,0,.28); animation: shuffleCard 1.05s ease-in-out infinite; }
+.shuffleVisual span:nth-child(2) { animation-delay: -.22s; }
+.shuffleVisual span:nth-child(3) { animation-delay: -.44s; }
+.shuffleVisual span:nth-child(4) { animation-delay: -.66s; }
+.shuffleVisual strong { color: #c8d3cc; font-size: 12px; text-transform: uppercase; letter-spacing: .13em; }
+@keyframes shuffleCard { 0%, 100% { transform: translateX(-38px) rotate(-7deg); } 50% { transform: translateX(38px) rotate(7deg); } }
+.wagerPile { width: 64px; height: 40px; display: block; position: relative; margin: 3px 0 2px; }
+.wagerPile:not(.hasChips)::after { content: ""; position: absolute; left: 50%; bottom: 4px; width: 50px; height: 16px; transform: translateX(-50%); border: 1px dashed rgba(212,174,98,.3); border-radius: 50%; }
+.wagerChipToken { --chip-color: #718c7d; position: absolute; left: 50%; bottom: calc(var(--chip-index) * 3px); width: 54px; height: 18px; transform: translateX(-50%); display: grid; place-items: center; border: 2px dashed rgba(255,255,255,.7); border-radius: 50%; background: var(--chip-color); color: white; box-shadow: inset 0 -4px rgba(0,0,0,.2), 0 2px 2px rgba(0,0,0,.28); }
+.wagerChipToken::before { content: ""; position: absolute; inset: 3px 8px; border: 1px solid rgba(255,255,255,.5); border-radius: 50%; background: color-mix(in srgb, var(--chip-color), #071b16 26%); }
+.wagerChipToken b { position: relative; z-index: 1; font-size: 7px; line-height: 1; }
+.wagerChipTone1 { --chip-color: #6e8e7d; }
+.wagerChipTone2 { --chip-color: #a9665e; }
+.wagerChipTone3 { --chip-color: #596f9a; }
+.wagerChipTone4 { --chip-color: #8e6c9b; }
+.sideBetRow { display: flex; gap: 5px; }
+.sideBetRow button { min-width: 92px; height: 38px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid rgba(255,255,255,.1); border-radius: 19px; background: rgba(4,18,14,.72); color: #9aac9f; cursor: pointer; }
+.sideBetRow button span { text-transform: uppercase; letter-spacing: .05em; font-size: 11px; font-weight: 700; }
+.sideBetRow button strong { width: 22px; color: #e0e7e2; font-size: 13px; font-variant-numeric: tabular-nums; }
+.sideBetRow button.selected { border-color: rgba(212,174,98,.42); background: rgba(212,174,98,.09); color: #d7c28e; }
+.sideBetRow button.selected strong { color: #f1d38e; }
+
+.controlDock { width: min(720px, 100%); justify-self: center; z-index: 5; padding-top: 10px; }
+.betControls, .playControls, .settledControls, .pacingControls { min-height: 72px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.075); border-radius: 15px; background: rgba(4,18,14,.86); backdrop-filter: blur(16px); box-shadow: 0 14px 34px rgba(0,0,0,.2); }
+.chipRow { display: flex; gap: 7px; }
+.betChip { width: 49px; height: 49px; position: relative; border-radius: 50%; border: 3px dashed rgba(255,255,255,.76); box-shadow: inset 0 0 0 3px currentColor, 0 5px 11px rgba(0,0,0,.28); cursor: pointer; }
+.betChip i { position: absolute; inset: 7px; border: 1px solid rgba(255,255,255,.35); border-radius: 50%; background: rgba(5,22,16,.82); }
+.betChip strong { position: relative; z-index: 2; color: white; font-size: 13px; }
+.betChipTone1 { color: #6e8e7d; background: #6e8e7d; }
+.betChipTone2 { color: #a9665e; background: #a9665e; }
+.betChipTone3 { color: #596f9a; background: #596f9a; }
+.betChipTone4 { color: #8e6c9b; background: #8e6c9b; }
+.betChip:disabled, .textControl:disabled, .playControls button:disabled { opacity: .25; cursor: not-allowed; filter: grayscale(1); }
+.textControl { height: 41px; padding: 0 9px; color: #c1ccc6; border: 0; background: none; font-size: 13px; font-weight: 750; text-transform: uppercase; letter-spacing: .07em; cursor: pointer; }
+.dealButton { min-width: 162px; height: 48px; margin-left: auto; }
+.dealButton:disabled { opacity: .38; cursor: not-allowed; }
+.playControls button { height: 52px; min-width: 102px; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; background: rgba(255,255,255,.035); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 9px; }
+.playControls button small { width: 28px; height: 28px; border: 1px solid rgba(255,255,255,.16); border-radius: 50%; display: grid; place-items: center; color: #d0dad4; font-size: 12px; font-weight: 750; }
+.playControls button span { text-transform: uppercase; letter-spacing: .06em; font-size: 13px; font-weight: 800; }
+.playControls .primaryAction { background: linear-gradient(180deg, #d5af64, #b88d46); color: #10271f; border-color: #e1bf79; }
+.playControls .primaryAction small { color: #193026; border-color: rgba(16,39,31,.28); }
+.settledControls { justify-content: flex-end; }
+.sessionChange { margin-right: auto; display: flex; flex-direction: column; padding-left: 9px; }
+.sessionChange small { color: #aebdb5; font-size: 12px; text-transform: uppercase; letter-spacing: .09em; }
+.sessionChange strong { font-family: Georgia, serif; font-size: 19px; font-weight: 400; margin-top: 2px; }
+.sessionChange .positive { color: #cdb472; }
+.sessionChange .negative { color: #bd8781; }
+.pacingControls { gap: 12px; color: #b8c6be; }
+.pacingControls strong { text-transform: uppercase; letter-spacing: .09em; font-size: 14px; }
+.dealingPulse { display: flex; gap: 4px; }
+.dealingPulse i { width: 5px; height: 5px; border-radius: 50%; background: var(--gold); animation: dealingDot 1s ease-in-out infinite; }
+.dealingPulse i:nth-child(2) { animation-delay: .16s; }
+.dealingPulse i:nth-child(3) { animation-delay: .32s; }
+@keyframes dealingDot { 0%, 70%, 100% { opacity: .25; transform: translateY(0); } 35% { opacity: 1; transform: translateY(-3px); } }
+
+.modalBackdrop { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 18px; background: rgba(1,8,6,.75); backdrop-filter: blur(8px); }
+.rulesSheet { width: min(520px, 100%); max-height: min(780px, calc(100dvh - 32px)); overflow-y: auto; position: relative; border: 1px solid rgba(212,174,98,.25); border-radius: 20px; background: linear-gradient(145deg, #103126, #081b15); padding: 31px; box-shadow: 0 30px 90px rgba(0,0,0,.55); }
+.closeButton { position: absolute; right: 17px; top: 15px; width: 32px; height: 32px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.09); border-radius: 50%; color: #9aaba1; font-size: 18px; cursor: pointer; }
+.sheetEyebrow { color: var(--gold); font-size: 10px; text-transform: uppercase; letter-spacing: .2em; }
+.rulesSheet h2 { margin: 9px 0 10px; font: 400 30px/1.15 Georgia, serif; letter-spacing: -.025em; }
+.rulesSheet > p { margin: 0; color: #9eafa5; font-size: 12px; line-height: 1.65; }
+.rulesSheet dl { margin: 23px 0 18px; border-top: 1px solid rgba(255,255,255,.08); }
+.rulesSheet dl div { display: flex; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,.08); font-size: 13px; }
+.rulesSheet dt { color: #86998e; }
+.rulesSheet dd { margin: 0; color: #e4e7e3; }
+.sidePaytables { margin: 4px 0 19px; }
+.sidePaytables h3 { margin: 0 0 10px; color: #95a69d; font-size: 10px; font-weight: 650; text-transform: uppercase; letter-spacing: .16em; }
+.sidePaytables > div { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; margin-bottom: 5px; border-radius: 8px; background: rgba(255,255,255,.035); }
+.sidePaytables strong { color: #e8dfca; font-size: 12px; }
+.sidePaytables span { color: #9aaba2; font-size: 10px; line-height: 1.55; }
+.rulesSheet .practiceNote { color: #667b6f; font-size: 9px; text-transform: uppercase; letter-spacing: .13em; }
+.roomSheet { width: min(450px, 100%); position: relative; padding: 31px; border: 1px solid rgba(212,174,98,.25); border-radius: 20px; background: linear-gradient(145deg, #103126, #081b15); box-shadow: 0 30px 90px rgba(0,0,0,.55); }
+.roomSheet h2 { margin: 9px 0 8px; font: 400 32px/1.1 Georgia, serif; }
+.roomSheet > p { margin: 0 0 22px; color: #a6b5ad; font-size: 13px; line-height: 1.55; }
+.roomSheet label { display: flex; flex-direction: column; gap: 7px; margin-bottom: 13px; }
+.roomSheet label > span { color: #9aaba2; font-size: 11px; font-weight: 700; }
+.roomSheet input { width: 100%; height: 48px; padding: 0 14px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; outline: 0; background: rgba(3,16,12,.6); color: #f4f3ed; font-size: 16px; }
+.roomSheet input:focus { border-color: rgba(212,174,98,.7); box-shadow: 0 0 0 3px rgba(212,174,98,.1); }
+.roomSheet .codeInput { text-transform: uppercase; letter-spacing: .25em; font-weight: 800; }
+.roomStackNote { padding: 10px 12px; border-radius: 9px; background: rgba(255,255,255,.035); color: #8fa198; font-size: 12px; }
+.roomStackNote strong { float: right; color: #e6ddc8; }
+.roomError { margin-top: 11px; padding: 9px 11px; border-radius: 8px; background: rgba(170,75,67,.14); color: #efaaa2; font-size: 12px; }
+.roomSheet .takeSeatButton:disabled, .roomLobbyActions .takeSeatButton:disabled { opacity: .5; cursor: wait; }
+
+@media (max-width: 700px) {
+  .topBar { height: 62px; padding: 0 14px; }
+  .brandMark { width: 32px; height: 32px; }
+  .brandWords strong { font-size: 16px; }
+  .balancePill { height: 38px; min-width: 103px; padding-right: 11px; }
+  .miniChip { width: 22px; height: 22px; }
+  .iconButton { width: 38px; height: 38px; }
+  .welcomeScreen { min-height: calc(100dvh - 62px); justify-content: flex-start; padding-top: max(40px, 7vh); }
+  .welcomeScreen h1 { font-size: 45px; }
+  .welcomeCopy { font-size: 12px; max-width: 360px; margin-bottom: 22px; }
+  .buyInCard { padding: 15px; }
+  .stakeTableOptions { grid-template-columns: 1fr; gap: 6px; }
+  .stakeTableOptions > button { min-height: 70px; flex-direction: row; align-items: center; justify-content: space-between; }
+  .stakeTableHeading { flex-direction: column; gap: 3px; }
+  .stakeChips { flex-shrink: 0; }
+  .stakeChip { width: 34px; height: 24px; }
+  .bankrollOptions { gap: 5px; }
+  .bankrollOptions button { height: 83px; }
+  .chipGraphic { width: 37px; height: 37px; }
+  .tableFacts { gap: 8px; font-size: 6px; }
+  .roomsNote { font-size: 7px; }
+  .roomEntryActions { width: 100%; max-width: 360px; }
+  .roomEntryActions button { flex: 1; justify-content: center; padding: 0 10px; }
+  .roomEntryActions button strong { font-size: 11px; }
+
+  .roomLobbyScreen { min-height: calc(100dvh - 62px); padding: 18px 10px; }
+  .roomLobbyCard { padding: 22px 13px; }
+  .roomLobbyCard > p { font-size: 12px; }
+  .seatGrid { grid-template-columns: repeat(2, 1fr); }
+  .roomSeat { min-height: 112px; }
+  .roomSeat:last-child:nth-child(odd) { grid-column: span 2; }
+  .roomLobbyActions { justify-content: center; }
+  .roomLobbyActions { flex-wrap: wrap; }
+  .multiplayerStatus { line-height: 1.5; }
+  .roomSheet { padding: 28px 21px; }
+
+  .roomGameScreen { min-height: calc(100dvh - 62px); grid-template-rows: 28px 135px auto minmax(170px, 1fr) auto; padding: 10px 8px max(8px, env(safe-area-inset-bottom)); }
+  .roomGameTopline { font-size: 9px; }
+  .roomGameTopline strong { max-width: 160px; text-align: center; }
+  .roomGameMessage { font-size: 15px; text-align: center; }
+  .roomPlayerRail { justify-content: flex-start; }
+  .roomPlayerHand { min-width: 155px; }
+  .roomGameControls { flex-wrap: wrap; min-height: 82px; }
+  .roomWagerPicker { width: 100%; justify-content: center; overflow-x: auto; }
+  .roomWagerPicker button { white-space: nowrap; }
+  .roomPlayControls { min-height: 112px; }
+
+  .tableScreen { min-height: calc(100dvh - 62px); grid-template-rows: 32px minmax(155px, .92fr) 40px minmax(190px, 1.14fr) auto; padding: 11px 9px max(9px, env(safe-area-inset-bottom)); }
+  .tableRail { left: -12%; right: -12%; top: 25px; height: 69%; }
+  .playingCard { width: clamp(67px, 20vw, 78px); border-radius: 7px; }
+  .cardFan { min-height: 112px; }
+  .dealerZone .cardFan { min-height: 105px; }
+  .emptyDealerMark { width: 67px; height: 97px; }
+  .zoneLabel { margin-bottom: 3px; }
+  .gameMessage { min-height: 45px; max-width: 94vw; padding: 8px 18px; font-size: 19px; }
+  .sideResults { max-width: 78vw; overflow-x: auto; }
+  .playerZone { gap: 26px; padding-top: 5px; }
+  .splitHands .playingCard { width: 62px; }
+  .splitHands .cardFan { padding-left: 12px; }
+  .splitHands .cardFan .playingCard { margin-left: -12px; }
+  .betSpotRing { width: 132px; height: 132px; }
+  .betSpotRing strong { font-size: 26px; margin: 1px 0; }
+  .wagerPile { height: 34px; transform: scale(.9); margin: 1px 0; }
+  .sideBetRow { gap: 3px; }
+  .sideBetRow button { min-width: 72px; height: 29px; padding: 0 7px; }
+  .sideBetRow button span { font-size: 10px; }
+  .controlDock { padding-top: 4px; }
+  .betControls, .playControls, .settledControls, .pacingControls { min-height: 68px; border-radius: 13px; gap: 6px; padding: 7px; }
+  .chipRow { gap: 4px; }
+  .betChip { width: 43px; height: 43px; }
+  .betChip i { inset: 6px; }
+  .dealButton { min-width: 117px; height: 49px; font-size: 12px; }
+  .textControl { padding: 0 4px; font-size: 11px; }
+  .playControls { display: grid; grid-template-columns: repeat(6, 1fr); min-height: 118px; }
+  .playControls button { min-width: 0; height: 50px; flex-direction: row; gap: 7px; }
+  .playControls button:nth-child(1), .playControls button:nth-child(2) { grid-column: span 3; }
+  .playControls button:nth-child(n+3) { grid-column: span 2; }
+  .playControls button small { width: 25px; height: 25px; font-size: 11px; }
+  .playControls button span { font-size: 12px; letter-spacing: .035em; }
+  .rulesSheet { padding: 28px 23px; }
+}
+
+@media (max-width: 390px) {
+  .brandWords small { display: none; }
+  .balancePill { min-width: 89px; }
+  .balancePill small { display: none; }
+  .welcomeScreen { padding-left: 12px; padding-right: 12px; }
+  .welcomeScreen h1 { font-size: 39px; }
+  .buyInHeading small { display: none; }
+  .bankrollOptions button > span:last-child { font-size: 9px; }
+  .tableFacts { display: none; }
+  .roomsNote { margin-top: 14px; }
+  .betChip { width: 39px; height: 39px; }
+  .dealButton { min-width: 105px; }
+}
+
+@media (max-height: 730px) and (max-width: 700px) {
+  .tableScreen { grid-template-rows: 28px 136px 35px 168px auto; }
+  .playingCard { width: 64px; }
+  .cardFan { min-height: 92px; }
+  .dealerZone .cardFan { min-height: 89px; }
+  .emptyDealerMark { width: 61px; height: 87px; }
+  .betSpotRing { width: 116px; height: 116px; }
+  .betSpotRing strong { font-size: 23px; }
+  .wagerPile { height: 29px; transform: scale(.78); margin: -1px 0; }
+  .sideBetRow button { height: 27px; }
+  .zoneLabel { min-height: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
