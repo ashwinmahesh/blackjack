@@ -31,7 +31,7 @@ type HandStatus = "active" | "standing" | "busted" | "won" | "lost" | "push" | "
 type SideBetKey = "perfectPairs" | "twentyOnePlusThree" | "matchDealer";
 type SideBets = Record<SideBetKey, number>;
 type SeenCardCounts = Record<CardType["rank"], number>;
-type SoundKind = "deal" | "flip" | "win" | "sidebet" | "blackjack" | "achievement" | "lose" | "shuffle" | "chip" | "entry" | "click";
+type SoundKind = "deal" | "flip" | "win" | "sidebet" | "blackjack" | "achievement" | "lose" | "tableBust" | "shuffle" | "chip" | "entry" | "click";
 type NavigatorWithAudioSession = Navigator & {
   audioSession?: { type: "auto" | "playback" | "transient" | "transient-solo" | "ambient" | "play-and-record" };
 };
@@ -915,6 +915,31 @@ export default function BlackjackGame() {
       return;
     }
 
+    if (kind === "tableBust") {
+      const notes = [
+        { offset: 0, frequency: 392, duration: 0.34 },
+        { offset: 0.2, frequency: 329.63, duration: 0.34 },
+        { offset: 0.4, frequency: 261.63, duration: 0.38 },
+        { offset: 0.64, frequency: 196, duration: 0.62 },
+      ];
+
+      notes.forEach(({ offset, frequency, duration }, index) => {
+        const start = context.currentTime + offset;
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = index === notes.length - 1 ? "triangle" : "sine";
+        oscillator.frequency.setValueAtTime(frequency, start);
+        gain.gain.setValueAtTime(0.001, start);
+        gain.gain.exponentialRampToValueAtTime(index === notes.length - 1 ? 0.09 : 0.065, start + 0.018);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + duration + 0.02);
+      });
+      return;
+    }
+
     if (kind === "lose") {
       const start = context.currentTime;
       const filter = context.createBiquadFilter();
@@ -1077,14 +1102,19 @@ export default function BlackjackGame() {
       window.setTimeout(() => playCardSound("blackjack"), resultDelay);
     } else if (newResults.some((hand) => ["WIN", "DEALER BUST"].includes(hand.result ?? ""))) {
       window.setTimeout(() => playCardSound("win"), resultDelay);
-    } else if (newResults.some((hand) => ["BUST", "DEALER WINS", "DEALER BLACKJACK"].includes(hand.result ?? ""))) {
-      window.setTimeout(() => playCardSound("lose"), resultDelay);
+    } else if (newResults.some((hand) => ["DEALER WINS", "DEALER BLACKJACK"].includes(hand.result ?? ""))) {
+      const bankrollBusted = Boolean(
+        nextPlayer &&
+        nextRoom.phase === "settled" &&
+        nextPlayer.bankroll < nextRoom.table.minimum,
+      );
+      if (!bankrollBusted) window.setTimeout(() => playCardSound("lose"), resultDelay);
     }
   }, [playCardSound, roomSession]);
 
   const showTableBust = useCallback((balance: number, minimum: number) => {
     setTableBustNotice({ id: Date.now(), balance, minimum });
-    playCardSound("lose");
+    playCardSound("tableBust");
   }, [playCardSound]);
 
   const playCardClick = useCallback(() => {
@@ -1530,7 +1560,6 @@ export default function BlackjackGame() {
           : hand,
       );
       const total = scoreHand(hands[current.activeHand].cards).total;
-      if (total > 21) window.setTimeout(() => playCardSound("lose"), 110);
       const next = {
         ...current,
         shoe,
@@ -1575,7 +1604,6 @@ export default function BlackjackGame() {
         if (index !== current.activeHand) return candidate;
         const cards = [...candidate.cards, dealtCard];
         const busted = scoreHand(cards).total > 21;
-        if (busted) window.setTimeout(() => playCardSound("lose"), 110);
         return {
           ...candidate,
           cards,
