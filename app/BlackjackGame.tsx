@@ -620,6 +620,7 @@ export default function BlackjackGame() {
   const gameRef = useRef<GameState | null>(null);
   const soundEnabledRef = useRef(true);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const audioNeedsRebuildRef = useRef(false);
   const previousRoomRef = useRef<RoomView | null>(null);
   const previousAchievementBalanceRef = useRef<number | null>(null);
   const previousAchievementSourceRef = useRef("");
@@ -727,6 +728,16 @@ export default function BlackjackGame() {
       if (audioSession && audioSession.type !== "playback") {
         audioSession.type = "playback";
       }
+      if (audioNeedsRebuildRef.current) {
+        const staleContext = audioContextRef.current;
+        audioContextRef.current = null;
+        audioNeedsRebuildRef.current = false;
+        if (staleContext && staleContext.state !== "closed") {
+          void staleContext.close().catch(() => {
+            // A broken iOS context can reject close(); it is no longer reused either way.
+          });
+        }
+      }
       const existingContext = audioContextRef.current;
       const context = !existingContext || existingContext.state === "closed"
         ? new AudioContext()
@@ -744,24 +755,25 @@ export default function BlackjackGame() {
   }, []);
 
   useEffect(() => {
-    const resumeExistingAudio = () => {
-      if (document.visibilityState === "visible" && audioContextRef.current) {
-        unlockAudio();
-      }
+    const markAudioForRebuild = () => {
+      if (audioContextRef.current) audioNeedsRebuildRef.current = true;
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") markAudioForRebuild();
     };
     const unlockFromInteraction = () => {
       unlockAudio();
     };
 
-    document.addEventListener("visibilitychange", resumeExistingAudio);
-    window.addEventListener("focus", resumeExistingAudio);
-    window.addEventListener("pageshow", resumeExistingAudio);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", markAudioForRebuild);
+    window.addEventListener("pagehide", markAudioForRebuild);
     window.addEventListener("pointerdown", unlockFromInteraction, { capture: true });
     window.addEventListener("keydown", unlockFromInteraction, { capture: true });
     return () => {
-      document.removeEventListener("visibilitychange", resumeExistingAudio);
-      window.removeEventListener("focus", resumeExistingAudio);
-      window.removeEventListener("pageshow", resumeExistingAudio);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", markAudioForRebuild);
+      window.removeEventListener("pagehide", markAudioForRebuild);
       window.removeEventListener("pointerdown", unlockFromInteraction, { capture: true });
       window.removeEventListener("keydown", unlockFromInteraction, { capture: true });
     };
@@ -774,11 +786,21 @@ export default function BlackjackGame() {
     if (enabled) unlockAudio();
   }
 
-  const playCardSound = useCallback((kind: SoundKind) => {
+  const playCardSound = useCallback(function playSound(kind: SoundKind) {
     if (!soundEnabledRef.current || typeof window === "undefined") return;
 
     const context = unlockAudio();
     if (!context) return;
+    if (context.state !== "running") {
+      void context.resume().then(() => {
+        if (audioContextRef.current === context && context.state === "running") {
+          playSound(kind);
+        }
+      }).catch(() => {
+        // The next direct interaction will retry with a fresh context.
+      });
+      return;
+    }
 
     if (kind === "win") {
       const winChime = [
