@@ -31,7 +31,7 @@ type HandStatus = "active" | "standing" | "busted" | "won" | "lost" | "push" | "
 type SideBetKey = "perfectPairs" | "twentyOnePlusThree" | "matchDealer";
 type SideBets = Record<SideBetKey, number>;
 type SeenCardCounts = Record<CardType["rank"], number>;
-type SoundKind = "deal" | "flip" | "win" | "blackjack" | "achievement" | "lose" | "shuffle" | "chip" | "entry" | "click";
+type SoundKind = "deal" | "flip" | "win" | "sidebet" | "blackjack" | "achievement" | "lose" | "shuffle" | "chip" | "entry" | "click";
 type NavigatorWithAudioSession = Navigator & {
   audioSession?: { type: "auto" | "playback" | "transient" | "transient-solo" | "ambient" | "play-and-record" };
 };
@@ -316,12 +316,14 @@ function PlayingCard({
   revealed = false,
   motion,
   delayMs = 0,
+  onInteract,
 }: {
   card?: CardType;
   hidden?: boolean;
   revealed?: boolean;
   motion?: "dealer" | "player";
   delayMs?: number;
+  onInteract?: () => void;
 }) {
   const motionClass = motion === "dealer"
     ? "cardMotionDealer"
@@ -341,7 +343,7 @@ function PlayingCard({
         { transform: "translateY(1px) scale(.995)", offset: 0.72 },
         { transform: "translateY(0) scale(1)" },
       ],
-      { duration: 300, easing: "cubic-bezier(.2,.85,.3,1.35)" },
+      { duration: 460, easing: "cubic-bezier(.2,.78,.3,1.18)" },
     );
     cardBounceAnimations.set(element, animation);
     animation.addEventListener("finish", () => {
@@ -351,11 +353,13 @@ function PlayingCard({
     }, { once: true });
   };
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    onInteract?.();
     bounceCard(event.currentTarget);
   };
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
+    onInteract?.();
     bounceCard(event.currentTarget);
   };
   const interactionProps = {
@@ -406,10 +410,12 @@ function RoomPlayerSeat({
   player,
   isLocal,
   isActive,
+  onCardInteract,
 }: {
   player: RoomPlayerView;
   isLocal: boolean;
   isActive: boolean;
+  onCardInteract: () => void;
 }) {
   return (
     <article
@@ -448,6 +454,7 @@ function RoomPlayerSeat({
                     delayMs={cardIndex * 110 + handIndex * 45}
                     key={card.id}
                     motion="player"
+                    onInteract={onCardInteract}
                   />
                 ))}
               </div>
@@ -830,6 +837,41 @@ export default function BlackjackGame() {
       return;
     }
 
+    if (kind === "sidebet") {
+      const sideBetSparkle = [
+        [0, 1046.5],
+        [0.075, 1318.51],
+        [0.15, 1174.66],
+        [0.225, 1567.98],
+      ] as const;
+      sideBetSparkle.forEach(([offset, frequency], index) => {
+        const start = context.currentTime + offset;
+        const oscillator = context.createOscillator();
+        const shimmer = context.createOscillator();
+        const gain = context.createGain();
+        const shimmerGain = context.createGain();
+        oscillator.type = "triangle";
+        shimmer.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, start);
+        shimmer.frequency.setValueAtTime(frequency * 2, start);
+        gain.gain.setValueAtTime(0.001, start);
+        gain.gain.exponentialRampToValueAtTime(index === 3 ? 0.06 : 0.045, start + 0.008);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.24);
+        shimmerGain.gain.setValueAtTime(0.001, start);
+        shimmerGain.gain.exponentialRampToValueAtTime(0.012, start + 0.006);
+        shimmerGain.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
+        oscillator.connect(gain);
+        shimmer.connect(shimmerGain);
+        gain.connect(context.destination);
+        shimmerGain.connect(context.destination);
+        oscillator.start(start);
+        shimmer.start(start);
+        oscillator.stop(start + 0.25);
+        shimmer.stop(start + 0.19);
+      });
+      return;
+    }
+
     if (kind === "blackjack") {
       [523.25, 659.25, 783.99, 1046.5].forEach((frequency, index) => {
         const oscillator = context.createOscillator();
@@ -1043,6 +1085,10 @@ export default function BlackjackGame() {
   const showTableBust = useCallback((balance: number, minimum: number) => {
     setTableBustNotice({ id: Date.now(), balance, minimum });
     playCardSound("lose");
+  }, [playCardSound]);
+
+  const playCardClick = useCallback(() => {
+    playCardSound("click");
   }, [playCardSound]);
 
   useEffect(() => {
@@ -1404,8 +1450,12 @@ export default function BlackjackGame() {
     if (playerNatural || dealerNatural) playCardSound("flip");
     if (playerNatural && !dealerNatural) {
       window.setTimeout(() => playCardSound("blackjack"), 180);
-    } else if (sideBetResult.outcomes.some((outcome) => outcome.won)) {
-      window.setTimeout(() => playCardSound("win"), 180);
+    }
+    if (winningSideBets.length) {
+      window.setTimeout(
+        () => playCardSound("sidebet"),
+        playerNatural && !dealerNatural ? 650 : 180,
+      );
     }
 
     setGame((latest) => {
@@ -2041,6 +2091,7 @@ export default function BlackjackGame() {
                   hidden={!card}
                   key={card?.id ?? `hole-${index}`}
                   motion="dealer"
+                  onInteract={playCardClick}
                   revealed={index === 1 && Boolean(card) && roomSession.room.phase === "settled"}
                 />
               )) : <div className="emptyDealerMark"><span>◆</span></div>}
@@ -2056,6 +2107,7 @@ export default function BlackjackGame() {
                   isActive={player.id === roomSession.room.currentPlayerId}
                   isLocal={false}
                   key={player.id}
+                  onCardInteract={playCardClick}
                   player={player}
                 />
               ))}
@@ -2064,6 +2116,7 @@ export default function BlackjackGame() {
               <RoomPlayerSeat
                 isActive={roomPlayer.id === roomSession.room.currentPlayerId}
                 isLocal
+                onCardInteract={playCardClick}
                 player={roomPlayer}
               />
             ) : null}
@@ -2073,6 +2126,7 @@ export default function BlackjackGame() {
                   isActive={player.id === roomSession.room.currentPlayerId}
                   isLocal={false}
                   key={player.id}
+                  onCardInteract={playCardClick}
                   player={player}
                 />
               ))}
@@ -2273,6 +2327,7 @@ export default function BlackjackGame() {
                     hidden={hidden}
                     revealed={index === 1 && !hidden}
                     key={`${card.id}-${hidden ? "down" : "up"}`}
+                    onInteract={playCardClick}
                   />
                 );
               })}
@@ -2314,7 +2369,9 @@ export default function BlackjackGame() {
                     <HandValue cards={hand.cards} />
                   </div>
                   <div className="cardFan">
-                    {hand.cards.map((card) => <PlayingCard card={card} key={card.id} />)}
+                    {hand.cards.map((card) => (
+                      <PlayingCard card={card} key={card.id} onInteract={playCardClick} />
+                    ))}
                   </div>
                   <div className="handBet"><span>◎</span> {tokenAmount(hand.bet)}</div>
                   {hand.result ? (

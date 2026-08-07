@@ -62,7 +62,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   20%, 82% { opacity: 1; transform: translate(-50%, 0) scale(1); }
   100% { opacity: 0; transform: translate(-50%, -22px) scale(.98); }
 }
-.tableBustNotice { position: fixed; left: 50%; top: 47%; z-index: 115; width: min(570px, calc(100vw - 30px)); min-height: 190px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: clamp(18px, 4vw, 34px); padding: 26px clamp(22px, 5vw, 42px); overflow: hidden; border: 1px solid rgba(224,99,87,.72); border-radius: 20px; background: radial-gradient(circle at 16% 50%, rgba(203,74,65,.22), transparent 34%), linear-gradient(115deg, rgba(42,16,14,.98), rgba(12,24,19,.98)); box-shadow: 0 28px 90px rgba(0,0,0,.65), 0 0 45px rgba(201,69,61,.2), inset 0 1px rgba(255,255,255,.07); pointer-events: none; animation: bustedSlam 3.3s cubic-bezier(.18,.76,.25,1) forwards; will-change: opacity, transform; }
+.tableBustNotice { position: fixed; left: 50%; top: clamp(205px, 37%, 340px); z-index: 115; width: min(570px, calc(100vw - 30px)); min-height: 190px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: clamp(18px, 4vw, 34px); padding: 26px clamp(22px, 5vw, 42px); overflow: hidden; border: 1px solid rgba(224,99,87,.72); border-radius: 20px; background: radial-gradient(circle at 16% 50%, rgba(203,74,65,.22), transparent 34%), linear-gradient(115deg, rgba(42,16,14,.98), rgba(12,24,19,.98)); box-shadow: 0 28px 90px rgba(0,0,0,.65), 0 0 45px rgba(201,69,61,.2), inset 0 1px rgba(255,255,255,.07); pointer-events: none; animation: bustedSlam 3.3s cubic-bezier(.18,.76,.25,1) forwards; will-change: opacity, transform; }
 .tableBustNotice::before { content: ""; position: absolute; inset: 0; opacity: .14; background: repeating-linear-gradient(125deg, transparent 0 23px, rgba(231,119,105,.25) 24px, transparent 25px 48px); }
 .bustedChipGraphic { width: 112px; height: 112px; position: relative; z-index: 1; display: grid; place-items: center; border: 5px dashed #d56459; border-radius: 50%; background: radial-gradient(circle, #471c19 0 47%, #b44940 49% 55%, #281916 57%); color: #f09c90; filter: drop-shadow(0 13px 13px rgba(0,0,0,.35)); transform: rotate(-8deg); }
 .bustedChipGraphic::before, .bustedChipGraphic::after { content: ""; position: absolute; right: -17px; width: 24px; height: 19px; border: 2px solid #d56459; background: #321917; clip-path: polygon(0 0, 100% 20%, 70% 100%, 15% 72%); }
@@ -234,7 +234,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomLocalPlayer .roomPlayerBalance { font-size: 13px; }
 .roomHands { display: flex; align-items: flex-start; justify-content: center; gap: 7px; margin-top: 8px; }
 .roomLocalHands { max-width: 100%; gap: clamp(8px, 2vw, 22px); margin-top: 10px; padding: 5px 8px 8px; }
-.roomLocalHands:is([data-hand-count="2"], [data-hand-count="3"], [data-hand-count="4"], [data-hand-count="5"]) { width: 100%; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: start; row-gap: 7px; }
+.roomLocalHands:is([data-hand-count="2"], [data-hand-count="3"], [data-hand-count="4"], [data-hand-count="5"]) { width: 100%; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: start; row-gap: 20px; }
 .roomLocalHands[data-hand-count="2"] .roomHand { grid-column: span 3; }
 .roomLocalHands:is([data-hand-count="3"], [data-hand-count="4"], [data-hand-count="5"]) .roomHand { grid-column: span 2; }
 .roomLocalHands[data-hand-count="4"] .roomHand:nth-child(4) { grid-column: 3 / span 2; }
@@ -245,7 +245,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .playingCard { width: clamp(54px, 5vw, 68px); }
 .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .roomLocalCardFan { min-height: 83px; }
 .roomHand { display: flex; flex-direction: column; align-items: center; position: relative; }
-.roomHand.activeRoomHand::before { content: ""; position: absolute; inset: 3px -8px 12px; z-index: -1; border: 2px solid rgba(255,216,126,.88); border-radius: 13px; background: rgba(240,193,99,.055); box-shadow: 0 0 0 2px rgba(240,193,99,.12), 0 0 22px rgba(240,193,99,.25); }
+.roomHand.activeRoomHand::before { content: ""; position: absolute; inset: 3px -8px -9px; z-index: -1; border: 2px solid rgba(255,216,126,.88); border-radius: 13px; background: rgba(240,193,99,.055); box-shadow: 0 0 0 2px rgba(240,193,99,.12), 0 0 22px rgba(240,193,99,.25); }
 .roomHand.activeRoomHand::after { content: ""; position: absolute; left: 8%; right: 8%; bottom: -7px; height: 4px; border-radius: 3px; background: #ffda83; box-shadow: 0 0 13px rgba(255,218,131,.95); }
 .roomLocalCardFan { min-height: 130px; display: flex; align-items: center; padding-left: 18px; }
 .roomLocalCardFan .playingCard { width: clamp(78px, 7vw, 96px); margin-left: -18px; border-radius: 8px; }
@@ -367,7 +367,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .gameMessage small { color: #acbab2; font-family: Inter, sans-serif; font-size: 11px; font-weight: 650; letter-spacing: .12em; margin-top: 4px; }
 .gameMessage.win { color: #f1d690; border-color: rgba(212,174,98,.3); }
 .gameMessage.loss { color: #caa6a0; }
-.sideBetCelebration { position: fixed; left: 50%; top: 50%; z-index: 90; min-width: min(310px, calc(100vw - 34px)); max-width: min(480px, calc(100vw - 34px)); display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 19px 28px 21px; border: 1px solid rgba(239,205,129,.7); border-radius: 18px; background: radial-gradient(circle at 50% 0, rgba(239,205,129,.2), transparent 58%), rgba(5,27,20,.96); color: #f4dda3; box-shadow: 0 22px 70px rgba(0,0,0,.55), 0 0 40px rgba(212,174,98,.16); pointer-events: none; animation: sideBetRise 2.6s cubic-bezier(.2,.75,.25,1) forwards; will-change: opacity, transform; }
+.sideBetCelebration { position: fixed; left: 50%; top: clamp(175px, 34%, 310px); z-index: 90; min-width: min(310px, calc(100vw - 34px)); max-width: min(480px, calc(100vw - 34px)); display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 19px 28px 21px; border: 1px solid rgba(239,205,129,.7); border-radius: 18px; background: radial-gradient(circle at 50% 0, rgba(239,205,129,.2), transparent 58%), rgba(5,27,20,.96); color: #f4dda3; box-shadow: 0 22px 70px rgba(0,0,0,.55), 0 0 40px rgba(212,174,98,.16); pointer-events: none; animation: sideBetRise 2.6s cubic-bezier(.2,.75,.25,1) forwards; will-change: opacity, transform; }
 .sideBetCelebration > i { width: 31px; height: 31px; display: grid; place-items: center; margin-top: -35px; border: 1px solid rgba(239,205,129,.65); border-radius: 50%; background: #1c4b38; color: #f5d581; box-shadow: 0 0 20px rgba(239,205,129,.3); font-style: normal; font-size: 15px; }
 .sideBetCelebration > small { margin: 4px 0 3px; color: #aebfb5; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .2em; }
 .sideBetCelebration > span { display: flex; align-items: baseline; justify-content: center; gap: 8px; text-align: center; }
@@ -398,7 +398,8 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .playerHand.active { filter: drop-shadow(0 10px 14px rgba(212,174,98,.12)); }
 .playerHand.active::before { content: ""; position: absolute; inset: 25px -19px 15px; border: 1px solid rgba(212,174,98,.24); border-radius: 16px; z-index: -1; }
 .splitHands .playerHand.active { filter: drop-shadow(0 10px 20px rgba(255,212,117,.32)); }
-.splitHands .playerHand.active::before { inset: 20px -23px 10px; border: 3px solid rgba(255,218,132,.92); border-radius: 18px; background: rgba(240,193,99,.065); box-shadow: 0 0 0 3px rgba(240,193,99,.11), 0 0 27px rgba(255,209,108,.32), inset 0 0 18px rgba(240,193,99,.05); }
+.splitHands .playerHand.active::before { inset: 20px -23px -10px; border: 3px solid rgba(255,218,132,.92); border-radius: 18px; background: rgba(240,193,99,.065); box-shadow: 0 0 0 3px rgba(240,193,99,.11), 0 0 27px rgba(255,209,108,.32), inset 0 0 18px rgba(240,193,99,.05); }
+.splitHands:is([data-hand-count="4"], [data-hand-count="5"]) { row-gap: 22px; }
 .playerLabel { margin-bottom: 3px; }
 .handBet { margin-top: 7px; color: #e0e6e2; font-size: 15px; font-weight: 700; }
 .handBet span { color: var(--gold); }
@@ -575,7 +576,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .roomLocalPlayer .roomPlayerIdentity strong { max-width: 100px; font-size: 15px; }
   .roomLocalPlayer .roomPlayerIdentity small { font-size: 7px; }
   .roomLocalPlayer .roomPlayerBalance { font-size: 9px; }
-  .roomLocalHands { gap: 4px; margin-top: 8px; }
+  .roomLocalHands { column-gap: 4px; row-gap: 18px; margin-top: 8px; }
   .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .playingCard { width: clamp(46px, 13vw, 56px); }
   .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .roomLocalCardFan { min-height: 75px; }
   .roomLocalHands[data-hand-count="3"] .roomLocalCardFan { padding-left: 42px; }
@@ -608,6 +609,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .sideBetCelebration { padding-left: 19px; padding-right: 19px; }
   .playerZone { gap: 26px; padding-top: 5px; }
   .playerZone.splitHands { gap: 6px; padding-inline: 5px; }
+  .splitHands:is([data-hand-count="4"], [data-hand-count="5"]) { row-gap: 20px; }
   .splitHands[data-hand-count="2"] .playingCard { width: clamp(68px, 20vw, 80px); }
   .splitHands[data-hand-count="3"] .playingCard { width: clamp(58px, 17vw, 68px); }
   .splitHands:is([data-hand-count="4"], [data-hand-count="5"]) .playingCard { width: clamp(46px, 13vw, 56px); }
