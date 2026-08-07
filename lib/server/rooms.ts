@@ -300,7 +300,6 @@ export function createRoom(input: {
   name: string;
   passcode: string;
   startingBankroll?: number;
-  tableId?: string;
 }) {
   pruneExpiredRooms();
   const name = cleanName(input.name);
@@ -315,7 +314,7 @@ export function createRoom(input: {
     Number.isFinite(requestedBankroll) && requestedBankroll > 0 && requestedBankroll <= 10_000_000
       ? requestedBankroll
       : 500;
-  const selectedTable = ROOM_TABLES.find((table) => table.id === input.tableId) ?? ROOM_TABLES[0];
+  const selectedTable = ROOM_TABLES[0];
   const hostToken = playerToken();
   const host: StoredPlayer = {
     id: randomBytes(6).toString("base64url"),

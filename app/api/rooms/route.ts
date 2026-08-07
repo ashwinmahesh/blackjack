@@ -9,13 +9,11 @@ export async function POST(request: NextRequest) {
       name?: string;
       passcode?: string;
       startingBankroll?: number;
-      tableId?: string;
     };
     const result = createRoom({
       name: body.name ?? "",
       passcode: body.passcode ?? "",
       startingBankroll: body.startingBankroll,
-      tableId: body.tableId,
     });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {

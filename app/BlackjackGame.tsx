@@ -157,6 +157,10 @@ function tokenAmount(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value);
 }
 
+function chipValueClass(value: number) {
+  return `chipValue${value}`;
+}
+
 function emptySeenCardCounts(): SeenCardCounts {
   return Object.fromEntries(CARD_COUNT_RANKS.map((rank) => [rank, 0])) as SeenCardCounts;
 }
@@ -528,15 +532,14 @@ function HandValue({ cards, hidden = false }: { cards: CardType[]; hidden?: bool
 }
 
 function ChipPile({ amount, denominations }: { amount: number; denominations: readonly number[] }) {
-  const chips: Array<{ value: number; tone: number }> = [];
+  const chips: Array<{ value: number }> = [];
   let remaining = amount;
 
   for (const denomination of [...denominations].reverse()) {
     const count = Math.floor(remaining / denomination);
     const visibleCount = Math.min(count, 3);
-    const tone = denominations.indexOf(denomination) + 1;
     for (let index = 0; index < visibleCount; index += 1) {
-      chips.push({ value: denomination, tone });
+      chips.push({ value: denomination });
     }
     remaining -= count * denomination;
   }
@@ -545,7 +548,7 @@ function ChipPile({ amount, denominations }: { amount: number; denominations: re
     <span className={`wagerPile ${chips.length ? "hasChips" : ""}`} aria-hidden="true">
       {chips.slice(0, 9).map((chip, index) => (
         <i
-          className={`wagerChipToken wagerChipTone${chip.tone}`}
+          className={`wagerChipToken ${chipValueClass(chip.value)}`}
           style={{ "--chip-index": index } as CSSProperties}
           key={`${chip.value}-${index}`}
         >
@@ -1111,7 +1114,13 @@ export default function BlackjackGame() {
     }
   }, [playCardSound, roomSession]);
 
-  const showTableBust = useCallback((balance: number, minimum: number) => {
+  const showTableBust = useCallback((balance: number, minimum: number, resetAchievements = false) => {
+    if (resetAchievements) {
+      achievementQueueRef.current = [];
+      previousAchievementBalanceRef.current = balance;
+      setAchievementBanner(null);
+      setUnlockedAchievements([]);
+    }
     setTableBustNotice({ id: Date.now(), balance, minimum });
     playCardSound("tableBust");
   }, [playCardSound]);
@@ -1322,7 +1331,7 @@ export default function BlackjackGame() {
     lastTableBustRoundRef.current = completedTableBustKey;
     if (completedTableBalance >= completedTableMinimum) return;
     const timer = window.setTimeout(() => {
-      showTableBust(completedTableBalance, completedTableMinimum);
+      showTableBust(completedTableBalance, completedTableMinimum, true);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [
@@ -1824,7 +1833,6 @@ export default function BlackjackGame() {
           name: roomName,
           passcode: roomPasscode,
           ...(roomMode === "create" ? { startingBankroll: wallet } : {}),
-          ...(roomMode === "create" ? { tableId: selectedTable.id } : {}),
         }),
       });
       const data = (await response.json()) as {
@@ -2167,19 +2175,34 @@ export default function BlackjackGame() {
               ) : (
                 <>
                   <div className="roomWagerPicker">
-                    <button type="button" onClick={() => setRoomWager(roomSession.room.table.minimum)}>Clear</button>
+                    <button
+                      className="roomWagerReset"
+                      type="button"
+                      onClick={() => setRoomWager(roomSession.room.table.minimum)}
+                    >
+                      Reset
+                    </button>
                     {roomSession.room.table.chips.map((chip) => (
                       <button
+                        className="roomChipButton"
                         type="button"
                         key={chip}
+                        aria-label={`Add ${tokenAmount(chip)} tokens to bet`}
                         onClick={() => {
                           playCardSound("chip");
                           setRoomWager((wager) => Math.min((roomPlayer?.bankroll ?? 0), wager + chip));
                         }}
                       >
-                        +{tokenAmount(chip)}
+                        <i className={`stakeChip ${chipValueClass(chip)}`}>{tokenAmount(chip)}</i>
                       </button>
                     ))}
+                  </div>
+                  <div className="roomWagerSummary" aria-live="polite">
+                    <ChipPile amount={roomWager} denominations={roomSession.room.table.chips} />
+                    <span>
+                      <small>Current bet</small>
+                      <strong>{tokenAmount(roomWager)}</strong>
+                    </span>
                   </div>
                   <button
                     className="dealButton"
@@ -2187,7 +2210,7 @@ export default function BlackjackGame() {
                     onClick={() => sendRoomAction("bet", roomWager)}
                     disabled={roomBusy || roomWager > (roomPlayer?.bankroll ?? 0)}
                   >
-                    Bet {tokenAmount(roomWager)}
+                    Place bet
                   </button>
                 </>
               )
@@ -2240,8 +2263,8 @@ export default function BlackjackGame() {
                     <small>Minimum {tokenAmount(table.minimum)}</small>
                   </span>
                   <span className="stakeChips">
-                    {table.chips.map((value, index) => (
-                      <i className={`stakeChip stakeChip${index + 1}`} key={value}>{tokenAmount(value)}</i>
+                    {table.chips.map((value) => (
+                      <i className={`stakeChip ${chipValueClass(value)}`} key={value}>{tokenAmount(value)}</i>
                     ))}
                   </span>
                 </button>
@@ -2449,11 +2472,11 @@ export default function BlackjackGame() {
             {game.phase === "betting" ? (
               <div className="betControls">
                 <div className="chipRow" aria-label="Add to bet">
-                  {selectedTable.chips.map((value, index) => (
+                  {selectedTable.chips.map((value) => (
                     <button
                       type="button"
                       key={value}
-                      className={`betChip betChipTone${index + 1}`}
+                      className={`betChip ${chipValueClass(value)}`}
                       onClick={() => changeBet(value)}
                       disabled={game.currentBet + sideBetStake(game.sideBets) + value > game.bankroll}
                       aria-label={`Add ${value} tokens`}

@@ -152,10 +152,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .stakeTableHeading strong { color: #edf0ed; font-size: 14px; }
 .stakeTableHeading small { color: #91a399; font-size: 10px; }
 .stakeChips { display: flex; gap: 6px; }
-.stakeChip { --stake-chip: #6e8e7d; width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border: 2px dashed rgba(255,255,255,.67); border-radius: 50%; background: var(--stake-chip); color: white; box-shadow: inset 0 0 0 2px rgba(4,18,14,.35); font-size: 7px; font-style: normal; font-weight: 800; }
-.stakeChip2 { --stake-chip: #a9665e; }
-.stakeChip3 { --stake-chip: #596f9a; }
-.stakeChip4 { --stake-chip: #8e6c9b; }
+.stakeChip { width: 38px; height: 38px; flex: 0 0 38px; display: grid; place-items: center; border: 2px dashed rgba(255,255,255,.67); border-radius: 50%; background: var(--chip-color, #527c66); color: white; box-shadow: inset 0 0 0 2px rgba(4,18,14,.35); font-size: 7px; font-style: normal; font-weight: 800; }
 .chipGraphic { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; position: relative; border: 3px dashed rgba(255,255,255,.65); box-shadow: inset 0 0 0 3px currentColor, 0 5px 10px rgba(0,0,0,.2); }
 .chipGraphic i { position: absolute; inset: 7px; border-radius: 50%; background: rgba(3,15,11,.8); border: 1px solid rgba(255,255,255,.24); }
 .chipGraphic b { position: relative; z-index: 2; color: white; font-size: 9px; }
@@ -270,8 +267,18 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomLocalPlayer .roomWaiting { min-height: 140px; font-size: 13px; }
 .roomGameControls { width: min(760px, 100%); min-height: 72px; justify-self: center; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 15px; background: rgba(4,18,14,.9); }
 .roomGameControls > strong { color: #c6d1ca; font-size: 13px; }
-.roomWagerPicker { display: flex; gap: 5px; }
-.roomWagerPicker button { height: 38px; padding: 0 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: rgba(255,255,255,.04); color: #c5d0ca; font-size: 10px; cursor: pointer; }
+.roomWagerPicker { display: flex; align-items: center; gap: 6px; }
+.roomWagerPicker button { cursor: pointer; }
+.roomWagerPicker .roomWagerReset { height: 38px; padding: 0 10px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: rgba(255,255,255,.04); color: #c5d0ca; font-size: 10px; }
+.roomWagerPicker .roomChipButton { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; transition: transform .16s ease, filter .16s ease; }
+.roomWagerPicker .roomChipButton:hover { transform: translateY(-2px) scale(1.04); filter: brightness(1.12); }
+.roomWagerPicker .roomChipButton:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.roomWagerPicker .roomChipButton .stakeChip { width: 42px; height: 42px; flex-basis: 42px; font-size: 8px; box-shadow: inset 0 0 0 2px rgba(4,18,14,.35), 0 4px 8px rgba(0,0,0,.28); }
+.roomWagerSummary { min-width: 116px; display: flex; align-items: center; gap: 5px; }
+.roomWagerSummary .wagerPile { flex: 0 0 64px; }
+.roomWagerSummary > span { display: flex; flex-direction: column; line-height: 1.05; }
+.roomWagerSummary small { color: #83978c; font-size: 7px; text-transform: uppercase; letter-spacing: .1em; }
+.roomWagerSummary strong { margin-top: 3px; color: #f3dfb3; font-size: 15px; font-variant-numeric: tabular-nums; }
 .roomGameControls .dealButton { margin: 0; }
 .roomPlayControls { border: 0; background: none; box-shadow: none; padding: 0; }
 .roomControlError { color: #f0a29a; font-size: 11px; }
@@ -429,10 +436,15 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .wagerChipToken { --chip-color: #718c7d; position: absolute; left: 50%; bottom: calc(var(--chip-index) * 3px); width: 54px; height: 18px; transform: translateX(-50%); display: grid; place-items: center; border: 2px dashed rgba(255,255,255,.7); border-radius: 50%; background: var(--chip-color); color: white; box-shadow: inset 0 -4px rgba(0,0,0,.2), 0 2px 2px rgba(0,0,0,.28); }
 .wagerChipToken::before { content: ""; position: absolute; inset: 3px 8px; border: 1px solid rgba(255,255,255,.5); border-radius: 50%; background: color-mix(in srgb, var(--chip-color), #071b16 26%); }
 .wagerChipToken b { position: relative; z-index: 1; font-size: 7px; line-height: 1; }
-.wagerChipTone1 { --chip-color: #6e8e7d; }
-.wagerChipTone2 { --chip-color: #a9665e; }
-.wagerChipTone3 { --chip-color: #596f9a; }
-.wagerChipTone4 { --chip-color: #8e6c9b; }
+.chipValue10 { --chip-color: #527c66; }
+.chipValue25 { --chip-color: #a85750; }
+.chipValue50 { --chip-color: #4f6fa8; }
+.chipValue100 { --chip-color: #343b46; }
+.chipValue500 { --chip-color: #77539a; }
+.chipValue1000 { --chip-color: #c38432; }
+.chipValue5000 { --chip-color: #9b3f54; }
+.chipValue10000 { --chip-color: #287c82; }
+.chipValue25000 { --chip-color: #b49a42; }
 .sideBetRow { display: flex; gap: 5px; }
 .sideBetRow button { min-width: 92px; height: 38px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid rgba(255,255,255,.1); border-radius: 19px; background: rgba(4,18,14,.72); color: #9aac9f; cursor: pointer; }
 .sideBetRow button span { text-transform: uppercase; letter-spacing: .05em; font-size: 11px; font-weight: 700; }
@@ -443,13 +455,10 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .controlDock { width: min(720px, 100%); justify-self: center; z-index: 5; padding-top: 10px; }
 .betControls, .playControls, .settledControls, .pacingControls { min-height: 72px; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.075); border-radius: 15px; background: rgba(4,18,14,.86); backdrop-filter: blur(16px); box-shadow: 0 14px 34px rgba(0,0,0,.2); }
 .chipRow { display: flex; gap: 7px; }
-.betChip { width: 49px; height: 49px; position: relative; border-radius: 50%; border: 3px dashed rgba(255,255,255,.76); box-shadow: inset 0 0 0 3px currentColor, 0 5px 11px rgba(0,0,0,.28); cursor: pointer; }
+.betChip { width: 49px; height: 49px; position: relative; border-radius: 50%; border: 3px dashed rgba(255,255,255,.76); color: var(--chip-color, #527c66); background: var(--chip-color, #527c66); box-shadow: inset 0 0 0 3px currentColor, 0 5px 11px rgba(0,0,0,.28); cursor: pointer; }
 .betChip i { position: absolute; inset: 7px; border: 1px solid rgba(255,255,255,.35); border-radius: 50%; background: rgba(5,22,16,.82); }
 .betChip strong { position: relative; z-index: 2; color: white; font-size: 13px; }
-.betChipTone1 { color: #6e8e7d; background: #6e8e7d; }
-.betChipTone2 { color: #a9665e; background: #a9665e; }
-.betChipTone3 { color: #596f9a; background: #596f9a; }
-.betChipTone4 { color: #8e6c9b; background: #8e6c9b; }
+.betChip.chipValue10000 strong, .betChip.chipValue25000 strong { font-size: 10px; }
 .betChip:disabled, .textControl:disabled, .playControls button:disabled { opacity: .25; cursor: not-allowed; filter: grayscale(1); }
 .textControl { height: 41px; padding: 0 9px; color: #c1ccc6; border: 0; background: none; font-size: 13px; font-weight: 750; text-transform: uppercase; letter-spacing: .07em; cursor: pointer; }
 .dealButton { min-width: 162px; height: 48px; margin-left: auto; }
@@ -596,7 +605,8 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .roomTurnBadge { top: -9px; padding: 4px 6px; font-size: 6px; }
   .roomGameControls { flex-wrap: wrap; min-height: 82px; }
   .roomWagerPicker { width: 100%; justify-content: center; overflow-x: auto; }
-  .roomWagerPicker button { white-space: nowrap; }
+  .roomWagerPicker button { flex: 0 0 auto; white-space: nowrap; }
+  .roomWagerSummary { min-width: 105px; }
   .roomPlayControls { min-height: 112px; }
 
   .tableScreen { min-height: calc(100dvh - 62px); grid-template-rows: 72px minmax(135px, .92fr) 40px minmax(190px, 1.14fr) auto; padding: 11px 9px max(9px, env(safe-area-inset-bottom)); }
