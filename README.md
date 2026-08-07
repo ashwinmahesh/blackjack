@@ -51,6 +51,10 @@ docker build -t blackjack-web:latest .
 docker run --rm -p 8080:8080 -e PORT=8080 blackjack-web:latest
 ```
 
+## Google Analytics
+
+Google Analytics 4 is enabled with the site's `G-RMTSSXD4LY` measurement ID. No runtime environment variable is required. After deployment, open the site and check the Google Analytics Realtime report to confirm events are arriving.
+
 ## Deploy to Google Cloud Run
 
 Set these values for your Google Cloud project and Artifact Registry repository:

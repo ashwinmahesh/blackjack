@@ -838,36 +838,23 @@ export default function BlackjackGame() {
     }
 
     if (kind === "sidebet") {
-      const sideBetSparkle = [
-        [0, 1046.5],
-        [0.075, 1318.51],
-        [0.15, 1174.66],
-        [0.225, 1567.98],
+      const sideBetChime = [
+        [0, 440],
+        [0.16, 554.37],
       ] as const;
-      sideBetSparkle.forEach(([offset, frequency], index) => {
+      sideBetChime.forEach(([offset, frequency], index) => {
         const start = context.currentTime + offset;
         const oscillator = context.createOscillator();
-        const shimmer = context.createOscillator();
         const gain = context.createGain();
-        const shimmerGain = context.createGain();
         oscillator.type = "triangle";
-        shimmer.type = "sine";
         oscillator.frequency.setValueAtTime(frequency, start);
-        shimmer.frequency.setValueAtTime(frequency * 2, start);
         gain.gain.setValueAtTime(0.001, start);
-        gain.gain.exponentialRampToValueAtTime(index === 3 ? 0.06 : 0.045, start + 0.008);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.24);
-        shimmerGain.gain.setValueAtTime(0.001, start);
-        shimmerGain.gain.exponentialRampToValueAtTime(0.012, start + 0.006);
-        shimmerGain.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
+        gain.gain.exponentialRampToValueAtTime(index === 1 ? 0.065 : 0.055, start + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.34);
         oscillator.connect(gain);
-        shimmer.connect(shimmerGain);
         gain.connect(context.destination);
-        shimmerGain.connect(context.destination);
         oscillator.start(start);
-        shimmer.start(start);
-        oscillator.stop(start + 0.25);
-        shimmer.stop(start + 0.19);
+        oscillator.stop(start + 0.36);
       });
       return;
     }

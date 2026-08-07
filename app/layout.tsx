@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
+
+const GOOGLE_ANALYTICS_ID = "G-RMTSSXD4LY";
 
 export const metadata: Metadata = {
   title: "Dealer's Edge — Blackjack",
@@ -24,7 +27,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <GoogleAnalytics gaId={GOOGLE_ANALYTICS_ID} />
+      </body>
     </html>
   );
 }
