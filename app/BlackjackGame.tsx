@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, FormEvent } from "react";
+import type {
+  AnimationEvent as ReactAnimationEvent,
+  CSSProperties,
+  FormEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   canSplit,
   Card as CardType,
@@ -24,6 +30,7 @@ type HandStatus = "active" | "standing" | "busted" | "won" | "lost" | "push" | "
 type SideBetKey = "perfectPairs" | "twentyOnePlusThree" | "matchDealer";
 type SideBets = Record<SideBetKey, number>;
 type SeenCardCounts = Record<CardType["rank"], number>;
+type SoundKind = "deal" | "flip" | "win" | "blackjack" | "achievement" | "lose" | "shuffle" | "chip" | "entry";
 
 type SideBetOutcome = {
   name: string;
@@ -319,6 +326,31 @@ function PlayingCard({
   const motionStyle = delayMs
     ? ({ animationDelay: `${delayMs}ms` } as CSSProperties)
     : undefined;
+  const bounceCard = (element: HTMLDivElement) => {
+    element.classList.remove("cardBounce");
+    void element.offsetWidth;
+    element.classList.add("cardBounce");
+  };
+  const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    bounceCard(event.currentTarget);
+  };
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    bounceCard(event.currentTarget);
+  };
+  const handleAnimationEnd = (event: ReactAnimationEvent<HTMLDivElement>) => {
+    if (event.animationName === "cardBounce") {
+      event.currentTarget.classList.remove("cardBounce");
+    }
+  };
+  const interactionProps = {
+    onAnimationEnd: handleAnimationEnd,
+    onKeyDown: handleKeyDown,
+    onPointerDown: handlePointerDown,
+    role: "button",
+    tabIndex: 0,
+  } as const;
 
   if (hidden || !card) {
     return (
@@ -326,6 +358,7 @@ function PlayingCard({
         className={`playingCard cardBack ${motionClass}`}
         style={motionStyle}
         aria-label="Face-down card"
+        {...interactionProps}
       >
         <span className="backFrame">
           <span>DE</span>
@@ -340,6 +373,8 @@ function PlayingCard({
     <div
       className={`playingCard cardFace ${isRed ? "redCard" : "blackCard"} ${motionClass} ${revealed ? "cardReveal" : ""}`}
       style={motionStyle}
+      aria-label={`${card.rank} of ${card.suit}`}
+      {...interactionProps}
     >
       <span className="cardCorner">
         <strong>{card.rank}</strong>
@@ -630,7 +665,7 @@ export default function BlackjackGame() {
     }
   }, []);
 
-  const playCardSound = useCallback((kind: "deal" | "flip" | "win" | "blackjack" | "achievement" | "lose" | "shuffle" | "chip") => {
+  const playCardSound = useCallback((kind: SoundKind) => {
     if (!soundEnabledRef.current || typeof window === "undefined") return;
 
     const context = unlockAudio();
@@ -761,6 +796,24 @@ export default function BlackjackGame() {
         gain.connect(context.destination);
         oscillator.start(start);
         oscillator.stop(start + 0.08);
+      });
+      return;
+    }
+
+    if (kind === "entry") {
+      [392, 523.25, 659.25].forEach((frequency, index) => {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        const start = context.currentTime + index * 0.075;
+        oscillator.type = index === 0 ? "triangle" : "sine";
+        oscillator.frequency.setValueAtTime(frequency, start);
+        gain.gain.setValueAtTime(0.001, start);
+        gain.gain.exponentialRampToValueAtTime(0.045, start + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.3);
+        oscillator.connect(gain);
+        gain.connect(context.destination);
+        oscillator.start(start);
+        oscillator.stop(start + 0.32);
       });
       return;
     }
@@ -1068,6 +1121,7 @@ export default function BlackjackGame() {
       );
       return;
     }
+    playCardSound("entry");
     setHomeNotice("");
     const startingBalance =
       wallet >= LOWEST_TABLE_MINIMUM ? wallet : RESET_BALANCE;
@@ -1533,6 +1587,7 @@ export default function BlackjackGame() {
   async function submitRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!roomMode || roomBusy) return;
+    unlockAudio();
     setRoomBusy(true);
     setRoomError("");
 
@@ -1561,6 +1616,7 @@ export default function BlackjackGame() {
         throw new Error(data.error ?? "Could not open the room");
       }
 
+      playCardSound("entry");
       setGame(null);
       setRoomSession({
         code: data.room.code,
