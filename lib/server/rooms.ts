@@ -5,7 +5,7 @@ import {
   createShoe,
   DECK_COUNT,
   isBlackjack,
-  MAX_SPLITS,
+  MAX_SPLIT_HANDS,
   playDealer,
   scoreHand,
   type Card,
@@ -484,9 +484,8 @@ export function roomAction(
     hand.result = "SURRENDER";
     advanceTurn(room);
   } else if (action === "split") {
-    const splitCount = player.hands.length - 1;
     if (
-      splitCount >= MAX_SPLITS ||
+      player.hands.length >= MAX_SPLIT_HANDS ||
       !canSplit(hand.cards) ||
       player.bankroll < hand.bet
     ) {

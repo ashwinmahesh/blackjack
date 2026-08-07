@@ -16,7 +16,7 @@ import {
   DECK_COUNT,
   dealerShouldHit,
   isBlackjack,
-  MAX_SPLITS,
+  MAX_SPLIT_HANDS,
   playDealer,
   scoreHand,
   scoreMatchDealer,
@@ -419,7 +419,10 @@ function RoomPlayerSeat({
         <span className="roomPlayerBalance">◎ {tokenAmount(player.bankroll)}</span>
       </header>
       {player.hands.length ? (
-        <div className={`roomHands ${isLocal ? "roomLocalHands" : "roomOpponentHands"}`}>
+        <div
+          className={`roomHands ${isLocal ? "roomLocalHands" : "roomOpponentHands"}`}
+          data-hand-count={player.hands.length}
+        >
           {player.hands.map((hand, handIndex) => (
             <div
               className={`roomHand ${isActive && handIndex === player.activeHand ? "activeRoomHand" : ""}`}
@@ -656,14 +659,52 @@ export default function BlackjackGame() {
   const unlockAudio = useCallback(() => {
     if (!soundEnabledRef.current || typeof window === "undefined") return null;
     try {
-      const context = audioContextRef.current ?? new AudioContext();
+      const existingContext = audioContextRef.current;
+      const context = !existingContext || existingContext.state === "closed"
+        ? new AudioContext()
+        : existingContext;
       audioContextRef.current = context;
-      if (context.state === "suspended") void context.resume();
+      if (context.state !== "running") {
+        void context.resume().catch(() => {
+          // Mobile browsers may require the next direct user gesture to resume audio.
+        });
+      }
       return context;
     } catch {
       return null;
     }
   }, []);
+
+  useEffect(() => {
+    const resumeExistingAudio = () => {
+      if (document.visibilityState === "visible" && audioContextRef.current) {
+        unlockAudio();
+      }
+    };
+    const unlockFromInteraction = () => {
+      unlockAudio();
+    };
+
+    document.addEventListener("visibilitychange", resumeExistingAudio);
+    window.addEventListener("focus", resumeExistingAudio);
+    window.addEventListener("pageshow", resumeExistingAudio);
+    window.addEventListener("pointerdown", unlockFromInteraction, { capture: true });
+    window.addEventListener("keydown", unlockFromInteraction, { capture: true });
+    return () => {
+      document.removeEventListener("visibilitychange", resumeExistingAudio);
+      window.removeEventListener("focus", resumeExistingAudio);
+      window.removeEventListener("pageshow", resumeExistingAudio);
+      window.removeEventListener("pointerdown", unlockFromInteraction, { capture: true });
+      window.removeEventListener("keydown", unlockFromInteraction, { capture: true });
+    };
+  }, [unlockAudio]);
+
+  function toggleSound() {
+    const enabled = !soundEnabledRef.current;
+    soundEnabledRef.current = enabled;
+    setSoundEnabled(enabled);
+    if (enabled) unlockAudio();
+  }
 
   const playCardSound = useCallback((kind: SoundKind) => {
     if (!soundEnabledRef.current || typeof window === "undefined") return;
@@ -1002,7 +1043,7 @@ export default function BlackjackGame() {
     game &&
       activeHand &&
       game.phase === "playing" &&
-      game.hands.length - 1 < MAX_SPLITS &&
+      game.hands.length < MAX_SPLIT_HANDS &&
       canSplit(activeHand.cards),
   );
   const splitAvailable = Boolean(
@@ -1410,7 +1451,7 @@ export default function BlackjackGame() {
       if (!current || current.phase !== "playing") return current;
       const original = current.hands[current.activeHand];
       if (
-        current.hands.length - 1 >= MAX_SPLITS ||
+        current.hands.length >= MAX_SPLIT_HANDS ||
         !canSplit(original.cards)
       ) {
         return current;
@@ -1793,7 +1834,7 @@ export default function BlackjackGame() {
           <button
             className="iconButton"
             type="button"
-            onClick={() => setSoundEnabled((enabled) => !enabled)}
+            onClick={toggleSound}
             aria-label={soundEnabled ? "Mute card sounds" : "Turn on card sounds"}
             title={soundEnabled ? "Mute card sounds" : "Turn on card sounds"}
           >
@@ -1972,7 +2013,7 @@ export default function BlackjackGame() {
                   <button type="button" onClick={() => sendRoomAction("stand")}><small>S</small><span>Stand</span></button>
                   <button className="primaryAction" type="button" onClick={() => sendRoomAction("hit")}><small>H</small><span>Hit</span></button>
                   <button type="button" onClick={() => sendRoomAction("double")} disabled={!roomActiveHand || roomActiveHand.cards.length !== 2 || (roomPlayer?.bankroll ?? 0) < (roomActiveHand?.bet ?? 0)}><small>2×</small><span>Double</span></button>
-                  <button type="button" onClick={() => sendRoomAction("split")} disabled={!roomActiveHand || !canSplit(roomActiveHand.cards) || (roomPlayer?.hands.length ?? 1) - 1 >= MAX_SPLITS || (roomPlayer?.bankroll ?? 0) < (roomActiveHand?.bet ?? 0)}><small>Ⅱ</small><span>Split</span></button>
+                  <button type="button" onClick={() => sendRoomAction("split")} disabled={!roomActiveHand || !canSplit(roomActiveHand.cards) || (roomPlayer?.hands.length ?? 1) >= MAX_SPLIT_HANDS || (roomPlayer?.bankroll ?? 0) < (roomActiveHand?.bet ?? 0)}><small>Ⅱ</small><span>Split</span></button>
                   <button type="button" onClick={() => sendRoomAction("surrender")} disabled={!roomActiveHand || roomActiveHand.cards.length !== 2 || (roomPlayer?.hands.length ?? 0) !== 1}><small>½</small><span>Surrender</span></button>
                 </div>
               ) : <strong>Waiting for {roomSession.room.players.find((player) => player.id === roomSession.room.currentPlayerId)?.name}</strong>
@@ -2134,7 +2175,10 @@ export default function BlackjackGame() {
             ) : null}
           </div>
 
-          <div className={`playerZone ${game.hands.length > 1 ? "splitHands" : ""}`}>
+          <div
+            className={`playerZone ${game.hands.length > 1 ? "splitHands" : ""}`}
+            data-hand-count={game.hands.length}
+          >
             {game.phase === "shuffling" ? (
               <div className="shuffleVisual" aria-hidden="true">
                 <span /><span /><span /><span />

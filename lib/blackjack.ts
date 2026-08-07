@@ -31,8 +31,7 @@ export type HandScore = {
 
 export const DECK_COUNT = 6;
 export const SHOE_SIZE = DECK_COUNT * 52;
-// Each split action adds one hand, so five splits can produce up to six hands.
-export const MAX_SPLITS = 5;
+export const MAX_SPLIT_HANDS = 5;
 
 export type SideBetResult = {
   label: string;
