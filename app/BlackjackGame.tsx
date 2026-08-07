@@ -503,6 +503,18 @@ function SoundIcon({ muted }: { muted: boolean }) {
   );
 }
 
+function GitHubIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M12 2C6.477 2 2 6.484 2 12.021c0 4.428 2.865 8.184 6.839 9.504.5.092.682-.217.682-.483 0-.237-.009-.866-.014-1.7-2.782.605-3.369-1.344-3.369-1.344-.455-1.158-1.11-1.466-1.11-1.466-.908-.621.069-.608.069-.608 1.004.071 1.532 1.033 1.532 1.033.892 1.531 2.341 1.089 2.91.833.091-.648.349-1.089.635-1.339-2.221-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.254-.446-1.272.098-2.65 0 0 .84-.269 2.75 1.027A9.535 9.535 0 0 1 12 6.852a9.55 9.55 0 0 1 2.504.337c1.909-1.296 2.748-1.027 2.748-1.027.545 1.378.202 2.396.099 2.65.64.7 1.028 1.595 1.028 2.688 0 3.848-2.337 4.695-4.566 4.943.359.31.679.923.679 1.86 0 1.343-.012 2.426-.012 2.756 0 .269.18.58.688.482A10.025 10.025 0 0 0 22 12.021C22 6.484 17.523 2 12 2Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
 function HandValue({ cards, hidden = false }: { cards: CardType[]; hidden?: boolean }) {
   if (!cards.length) return null;
   const shownCards = hidden ? cards.slice(0, 1) : cards;
@@ -2261,6 +2273,16 @@ export default function BlackjackGame() {
               <span>→</span><strong>Join with code</strong>
             </button>
           </div>
+          <a
+            className="githubHomeLink"
+            href="https://github.com/ashwinmahesh/blackjack"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="View Ashwin's Blackjack on GitHub"
+            title="View project on GitHub"
+          >
+            <GitHubIcon />
+          </a>
         </section>
       ) : (
         <section className="tableScreen">

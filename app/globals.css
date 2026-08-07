@@ -180,6 +180,10 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomEntryActions button:hover { border-color: rgba(212,174,98,.48); background: rgba(212,174,98,.08); }
 .roomEntryActions button span { color: var(--gold); font-size: 17px; }
 .roomEntryActions button strong { font-size: 12px; }
+.githubHomeLink { width: 42px; height: 42px; margin-top: 18px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.1); border-radius: 50%; color: #87998f; background: rgba(5,22,16,.55); transition: color .2s ease, border-color .2s ease, background .2s ease, transform .2s ease; }
+.githubHomeLink:hover { color: #f0d18f; border-color: rgba(212,174,98,.45); background: rgba(212,174,98,.08); transform: translateY(-2px); }
+.githubHomeLink:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.githubHomeLink svg { width: 22px; height: 22px; fill: currentColor; }
 
 .roomLobbyScreen { min-height: calc(100dvh - 74px); display: grid; place-items: center; padding: 34px 18px; position: relative; z-index: 2; }
 .roomLobbyCard { width: min(760px, 100%); padding: 30px; border: 1px solid rgba(212,174,98,.2); border-radius: 22px; background: linear-gradient(145deg, rgba(15,49,37,.96), rgba(7,28,21,.97)); box-shadow: 0 28px 90px rgba(0,0,0,.36); text-align: center; }
