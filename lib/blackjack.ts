@@ -38,6 +38,15 @@ export type SideBetResult = {
   payout: number;
 };
 
+export type BasicStrategyMove = "Hit" | "Stand" | "Double" | "Split" | "Surrender";
+
+export type BasicStrategyAdvice = {
+  move: BasicStrategyMove;
+  handLabel: string;
+  explanation: string;
+  fallback?: "Hit" | "Stand";
+};
+
 export function createShoe(decks = DECK_COUNT, random = Math.random): Card[] {
   const cards: Card[] = [];
 
@@ -95,6 +104,148 @@ export function canSplit(cards: Card[]): boolean {
   const splitValue = (card: Card) =>
     ["10", "J", "Q", "K"].includes(card.rank) ? 10 : card.rank;
   return splitValue(cards[0]) === splitValue(cards[1]);
+}
+
+export function getBasicStrategyAdvice(
+  cards: Card[],
+  dealerUpCard: Card,
+  options: {
+    allowDouble?: boolean;
+    allowSplit?: boolean;
+    allowSurrender?: boolean;
+  } = {},
+): BasicStrategyAdvice {
+  const dealerValue = dealerUpCard.rank === "A"
+    ? 11
+    : ["10", "J", "Q", "K"].includes(dealerUpCard.rank)
+      ? 10
+      : Number(dealerUpCard.rank);
+  const dealerLabel = dealerUpCard.rank;
+  const score = scoreHand(cards);
+  const allowDouble = options.allowDouble ?? cards.length === 2;
+  const allowSplit = options.allowSplit ?? canSplit(cards);
+  const allowSurrender = options.allowSurrender ?? cards.length === 2;
+  const pairValue = canSplit(cards)
+    ? cards[0].rank === "A"
+      ? 11
+      : ["10", "J", "Q", "K"].includes(cards[0].rank)
+        ? 10
+        : Number(cards[0].rank)
+    : null;
+  const handLabel = pairValue !== null
+    ? `Pair of ${pairValue === 11 ? "aces" : pairValue === 10 ? "tens" : `${pairValue}s`}`
+    : `${score.isSoft ? "Soft" : "Hard"} ${score.total}`;
+  const advice = (
+    move: BasicStrategyMove,
+    explanation: string,
+    fallback?: "Hit" | "Stand",
+  ): BasicStrategyAdvice => ({ move, handLabel, explanation, fallback });
+
+  // Six-deck S17 late-surrender exceptions. A pair of eights is still split.
+  if (
+    allowSurrender &&
+    pairValue !== 8 &&
+    ((score.total === 16 && [9, 10, 11].includes(dealerValue)) ||
+      (score.total === 15 && dealerValue === 10))
+  ) {
+    return advice(
+      "Surrender",
+      `${handLabel} gives up less expected value against dealer ${dealerLabel}.`,
+      "Hit",
+    );
+  }
+
+  if (pairValue !== null && allowSplit) {
+    if (pairValue === 11 || pairValue === 8) {
+      return advice("Split", `${handLabel} should always be split under these table rules.`);
+    }
+    if (pairValue === 10) {
+      return advice("Stand", `Keep a made 20 together against dealer ${dealerLabel}.`);
+    }
+    if (pairValue === 9) {
+      return [2, 3, 4, 5, 6, 8, 9].includes(dealerValue)
+        ? advice("Split", `${handLabel} gains more value as two hands against dealer ${dealerLabel}.`)
+        : advice("Stand", `Keep 18 together against dealer ${dealerLabel}.`);
+    }
+    if (pairValue === 7) {
+      return dealerValue <= 7
+        ? advice("Split", `${handLabel} is favored to split against dealer ${dealerLabel}.`)
+        : advice("Hit", `Dealer ${dealerLabel} is too strong for splitting sevens.`);
+    }
+    if (pairValue === 6) {
+      return dealerValue >= 2 && dealerValue <= 6
+        ? advice("Split", `${handLabel} is favored to split against dealer ${dealerLabel}.`)
+        : advice("Hit", `Play the hand as a hard 12 against dealer ${dealerLabel}.`);
+    }
+    if (pairValue === 4) {
+      return [5, 6].includes(dealerValue)
+        ? advice("Split", `Double-after-split makes this split profitable against dealer ${dealerLabel}.`)
+        : advice("Hit", `Play the hand as a hard 8 against dealer ${dealerLabel}.`);
+    }
+    if (pairValue === 3 || pairValue === 2) {
+      return dealerValue >= 2 && dealerValue <= 7
+        ? advice("Split", `${handLabel} is favored to split against dealer ${dealerLabel}.`)
+        : advice("Hit", `Dealer ${dealerLabel} is too strong for this split.`);
+    }
+    // Pair of fives follows hard-10 strategy.
+  }
+
+  if (pairValue === 11) {
+    return advice("Hit", "With splitting unavailable, draw to the pair of aces.");
+  }
+
+  if (score.isSoft) {
+    if (score.total >= 19) {
+      return advice("Stand", `${handLabel} is already strong against dealer ${dealerLabel}.`);
+    }
+    if (score.total === 18) {
+      if (dealerValue >= 3 && dealerValue <= 6 && allowDouble) {
+        return advice("Double", `${handLabel} has a doubling edge against dealer ${dealerLabel}.`, "Stand");
+      }
+      return [2, 7, 8].includes(dealerValue)
+        ? advice("Stand", `${handLabel} is strong enough to stand against dealer ${dealerLabel}.`)
+        : advice("Hit", `Improve ${handLabel.toLowerCase()} against dealer ${dealerLabel}.`);
+    }
+    const doubleRange = score.total === 17
+      ? [3, 4, 5, 6]
+      : score.total === 16 || score.total === 15
+        ? [4, 5, 6]
+        : [5, 6];
+    if (doubleRange.includes(dealerValue) && allowDouble) {
+      return advice("Double", `${handLabel} has a doubling edge against dealer ${dealerLabel}.`, "Hit");
+    }
+    return advice("Hit", `Improve ${handLabel.toLowerCase()} against dealer ${dealerLabel}.`);
+  }
+
+  if (score.total >= 17) {
+    return advice("Stand", `${handLabel} is strong enough to stand against dealer ${dealerLabel}.`);
+  }
+  if (score.total >= 13) {
+    return dealerValue <= 6
+      ? advice("Stand", `Let dealer ${dealerLabel} draw into a possible bust.`)
+      : advice("Hit", `${handLabel} needs improvement against dealer ${dealerLabel}.`);
+  }
+  if (score.total === 12) {
+    return dealerValue >= 4 && dealerValue <= 6
+      ? advice("Stand", `Let dealer ${dealerLabel} draw into a possible bust.`)
+      : advice("Hit", `Hit hard 12 against dealer ${dealerLabel}.`);
+  }
+  if (score.total === 11) {
+    return dealerValue <= 10 && allowDouble
+      ? advice("Double", `Hard 11 has a strong doubling edge against dealer ${dealerLabel}.`, "Hit")
+      : advice("Hit", `Hit hard 11 against dealer ${dealerLabel}.`);
+  }
+  if (score.total === 10) {
+    return dealerValue >= 2 && dealerValue <= 9 && allowDouble
+      ? advice("Double", `Hard 10 has a doubling edge against dealer ${dealerLabel}.`, "Hit")
+      : advice("Hit", `Hit hard 10 against dealer ${dealerLabel}.`);
+  }
+  if (score.total === 9) {
+    return dealerValue >= 3 && dealerValue <= 6 && allowDouble
+      ? advice("Double", `Hard 9 has a doubling edge against dealer ${dealerLabel}.`, "Hit")
+      : advice("Hit", `Hit hard 9 against dealer ${dealerLabel}.`);
+  }
+  return advice("Hit", `${handLabel} should draw against dealer ${dealerLabel}.`);
 }
 
 export function scorePerfectPairs(cards: Card[]): SideBetResult | null {

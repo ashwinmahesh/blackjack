@@ -2,19 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
-  AnimationEvent as ReactAnimationEvent,
   CSSProperties,
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
 import {
+  type BasicStrategyAdvice,
   canSplit,
   Card as CardType,
   createCutPoint,
   createShoe,
   DECK_COUNT,
   dealerShouldHit,
+  getBasicStrategyAdvice,
   isBlackjack,
   MAX_SPLIT_HANDS,
   playDealer,
@@ -30,7 +31,10 @@ type HandStatus = "active" | "standing" | "busted" | "won" | "lost" | "push" | "
 type SideBetKey = "perfectPairs" | "twentyOnePlusThree" | "matchDealer";
 type SideBets = Record<SideBetKey, number>;
 type SeenCardCounts = Record<CardType["rank"], number>;
-type SoundKind = "deal" | "flip" | "win" | "blackjack" | "achievement" | "lose" | "shuffle" | "chip" | "entry";
+type SoundKind = "deal" | "flip" | "win" | "blackjack" | "achievement" | "lose" | "shuffle" | "chip" | "entry" | "click";
+type NavigatorWithAudioSession = Navigator & {
+  audioSession?: { type: "auto" | "playback" | "transient" | "transient-solo" | "ambient" | "play-and-record" };
+};
 
 type SideBetOutcome = {
   name: string;
@@ -137,6 +141,7 @@ const CARD_COUNT_RANKS: CardType["rank"][] = [
 ];
 
 const DEAL_DELAY = 330;
+const cardBounceAnimations = new WeakMap<HTMLDivElement, Animation>();
 
 function pause(milliseconds: number) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
@@ -327,9 +332,23 @@ function PlayingCard({
     ? ({ animationDelay: `${delayMs}ms` } as CSSProperties)
     : undefined;
   const bounceCard = (element: HTMLDivElement) => {
-    element.classList.remove("cardBounce");
-    void element.offsetWidth;
-    element.classList.add("cardBounce");
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    cardBounceAnimations.get(element)?.cancel();
+    const animation = element.animate(
+      [
+        { transform: "translateY(0) scale(1)" },
+        { transform: "translateY(-8px) scale(1.035)", offset: 0.42 },
+        { transform: "translateY(1px) scale(.995)", offset: 0.72 },
+        { transform: "translateY(0) scale(1)" },
+      ],
+      { duration: 300, easing: "cubic-bezier(.2,.85,.3,1.35)" },
+    );
+    cardBounceAnimations.set(element, animation);
+    animation.addEventListener("finish", () => {
+      if (cardBounceAnimations.get(element) === animation) {
+        cardBounceAnimations.delete(element);
+      }
+    }, { once: true });
   };
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     bounceCard(event.currentTarget);
@@ -339,13 +358,7 @@ function PlayingCard({
     event.preventDefault();
     bounceCard(event.currentTarget);
   };
-  const handleAnimationEnd = (event: ReactAnimationEvent<HTMLDivElement>) => {
-    if (event.animationName === "cardBounce") {
-      event.currentTarget.classList.remove("cardBounce");
-    }
-  };
   const interactionProps = {
-    onAnimationEnd: handleAnimationEnd,
     onKeyDown: handleKeyDown,
     onPointerDown: handlePointerDown,
     role: "button",
@@ -524,6 +537,56 @@ function ChipPile({ amount, denominations }: { amount: number; denominations: re
   );
 }
 
+function StrategyAdvisor({
+  advice,
+  open,
+  onToggle,
+}: {
+  advice: BasicStrategyAdvice | null;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="strategyAdvisor">
+      <button
+        className="strategyToggle"
+        type="button"
+        aria-expanded={open}
+        aria-controls="basic-strategy-advice"
+        onClick={onToggle}
+      >
+        <span>Best move</span>
+        <b>{advice?.move ?? "—"}</b>
+        <i aria-hidden="true">⌄</i>
+      </button>
+      {open ? (
+        <div className="strategyPanel" id="basic-strategy-advice" role="status">
+          {advice ? (
+            <>
+              <header>
+                <span>
+                  <small>Basic strategy says</small>
+                  <strong>{advice.move}</strong>
+                </span>
+                <b>{advice.handLabel}</b>
+              </header>
+              <p>{advice.explanation}</p>
+              {advice.fallback ? (
+                <span className="strategyFallback">
+                  If {advice.move.toLowerCase()} is unavailable: {advice.fallback}
+                </span>
+              ) : null}
+              <footer>6 decks · S17 · DAS · late surrender · no card count</footer>
+            </>
+          ) : (
+            <p className="strategyWaiting">Deal a hand to see the recommended move.</p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function BlackjackGame() {
   const [wallet, setWallet] = useState(RESET_BALANCE);
   const [walletLoaded, setWalletLoaded] = useState(false);
@@ -541,6 +604,7 @@ export default function BlackjackGame() {
   const [homeNotice, setHomeNotice] = useState("");
   const [roomWager, setRoomWager] = useState(10);
   const [cardCountOpen, setCardCountOpen] = useState(false);
+  const [strategyOpen, setStrategyOpen] = useState(false);
   const [unlockedAchievements, setUnlockedAchievements] = useState<number[]>([]);
   const [achievementsLoaded, setAchievementsLoaded] = useState(false);
   const [achievementBanner, setAchievementBanner] = useState<number | null>(null);
@@ -659,6 +723,10 @@ export default function BlackjackGame() {
   const unlockAudio = useCallback(() => {
     if (!soundEnabledRef.current || typeof window === "undefined") return null;
     try {
+      const audioSession = (window.navigator as NavigatorWithAudioSession).audioSession;
+      if (audioSession && audioSession.type !== "playback") {
+        audioSession.type = "playback";
+      }
       const existingContext = audioContextRef.current;
       const context = !existingContext || existingContext.state === "closed"
         ? new AudioContext()
@@ -859,7 +927,7 @@ export default function BlackjackGame() {
       return;
     }
 
-    const duration = kind === "shuffle" ? 0.72 : kind === "flip" ? 0.09 : 0.075;
+    const duration = kind === "shuffle" ? 0.72 : kind === "flip" ? 0.09 : kind === "click" ? 0.035 : 0.075;
     const buffer = context.createBuffer(1, Math.ceil(context.sampleRate * duration), context.sampleRate);
     const samples = buffer.getChannelData(0);
     for (let index = 0; index < samples.length; index += 1) {
@@ -871,10 +939,10 @@ export default function BlackjackGame() {
     const filter = context.createBiquadFilter();
     const gain = context.createGain();
     filter.type = "bandpass";
-    filter.frequency.value = kind === "shuffle" ? 820 : kind === "flip" ? 2100 : 1150;
+    filter.frequency.value = kind === "shuffle" ? 820 : kind === "flip" ? 2100 : kind === "click" ? 1650 : 1150;
     filter.Q.value = kind === "flip" ? 0.8 : 0.55;
     gain.gain.setValueAtTime(
-      kind === "shuffle" ? 0.13 : kind === "flip" ? 0.11 : 0.085,
+      kind === "shuffle" ? 0.13 : kind === "flip" ? 0.11 : kind === "click" ? 0.045 : 0.085,
       context.currentTime,
     );
     gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + duration);
@@ -1056,6 +1124,19 @@ export default function BlackjackGame() {
       game.hands.length === 1 &&
       activeHand.cards.length === 2,
   );
+  const strategyAdvice = useMemo(() => {
+    if (
+      !game ||
+      game.phase !== "playing" ||
+      !activeHand ||
+      !game.dealer[0]
+    ) return null;
+    return getBasicStrategyAdvice(activeHand.cards, game.dealer[0], {
+      allowDouble: activeHand.cards.length === 2,
+      allowSplit: game.hands.length < MAX_SPLIT_HANDS && canSplit(activeHand.cards),
+      allowSurrender: game.hands.length === 1 && activeHand.cards.length === 2,
+    });
+  }, [activeHand, game]);
   const shoePercent = useMemo(
     () => (game ? Math.max(4, (game.shoe.length / SHOE_SIZE) * 100) : 100),
     [game],
@@ -2045,7 +2126,10 @@ export default function BlackjackGame() {
                   className={table.id === selectedTable.id ? "selected" : ""}
                   key={table.id}
                   type="button"
-                  onClick={() => setSelectedTableId(table.id)}
+                  onClick={() => {
+                    playCardSound("click");
+                    setSelectedTableId(table.id);
+                  }}
                 >
                   <span className="stakeTableHeading">
                     <strong>{table.name}</strong>
@@ -2103,17 +2187,30 @@ export default function BlackjackGame() {
                   />
                 </i>
               </div>
-              <button
-                className="cardCountToggle"
-                type="button"
-                aria-expanded={cardCountOpen}
-                aria-controls="seen-card-counts"
-                onClick={() => setCardCountOpen((open) => !open)}
-              >
-                <span>Cards seen</span>
-                <b>{seenCardTotal}</b>
-                <i aria-hidden="true">⌄</i>
-              </button>
+              <div className="tableUtilityRow">
+                <StrategyAdvisor
+                  advice={strategyAdvice}
+                  open={strategyOpen}
+                  onToggle={() => {
+                    setCardCountOpen(false);
+                    setStrategyOpen((open) => !open);
+                  }}
+                />
+                <button
+                  className="cardCountToggle"
+                  type="button"
+                  aria-expanded={cardCountOpen}
+                  aria-controls="seen-card-counts"
+                  onClick={() => {
+                    setStrategyOpen(false);
+                    setCardCountOpen((open) => !open);
+                  }}
+                >
+                  <span>Cards seen</span>
+                  <b>{seenCardTotal}</b>
+                  <i aria-hidden="true">⌄</i>
+                </button>
+              </div>
               {cardCountOpen ? (
                 <div className="cardCountPanel" id="seen-card-counts">
                   <header>

@@ -298,13 +298,30 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .shoeLabel > i em { position: absolute; top: -4px; width: 3px; height: 12px; transform: translateX(-50%); border-radius: 2px; background: #be5c52; box-shadow: 0 0 0 2px rgba(190,92,82,.15); }
 .shoeLabel > i em.reached { background: #ef786b; box-shadow: 0 0 10px rgba(239,120,107,.8); animation: cutMarkerPulse .8s ease-in-out infinite alternate; }
 @keyframes cutMarkerPulse { to { transform: translateX(-50%) scaleY(1.25); } }
-.cardCountToggle { min-width: 146px; height: 32px; margin: 9px 0 0 36px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: rgba(4,18,14,.72); color: #a9b9b0; cursor: pointer; font-size: 11px; }
+.tableUtilityRow { width: min(302px, calc(100vw - 88px)); margin: 9px 0 0 36px; display: flex; align-items: flex-start; gap: 6px; }
+.strategyAdvisor { min-width: 0; flex: 1 1 0; position: relative; }
+.cardCountToggle, .strategyToggle { min-width: 0; width: 100%; height: 32px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; background: rgba(4,18,14,.72); color: #a9b9b0; cursor: pointer; font-size: 11px; }
+.tableUtilityRow > .cardCountToggle { flex: 1 1 0; }
 .cardCountToggle:hover { border-color: rgba(212,174,98,.32); background: rgba(9,37,28,.88); }
 .cardCountToggle:focus-visible { outline: 2px solid #e2bd70; outline-offset: 2px; }
-.cardCountToggle > span { flex: 1; text-align: left; }
+.cardCountToggle > span, .strategyToggle > span { flex: 1; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .cardCountToggle > b { min-width: 22px; color: #ead18e; font-size: 12px; }
-.cardCountToggle > i { color: #71877b; font-style: normal; font-size: 15px; transition: transform .2s ease; }
+.cardCountToggle > i, .strategyToggle > i { color: #71877b; font-style: normal; font-size: 15px; transition: transform .2s ease; }
 .cardCountToggle[aria-expanded="true"] > i { transform: rotate(180deg); }
+.strategyToggle:hover { border-color: rgba(212,174,98,.4); background: rgba(9,37,28,.9); }
+.strategyToggle > b { color: #f0d18f; font-size: 11px; }
+.strategyToggle[aria-expanded="true"] { border-color: rgba(212,174,98,.45); background: rgba(212,174,98,.08); }
+.strategyToggle[aria-expanded="true"] > i { transform: rotate(180deg); }
+.strategyPanel { position: absolute; top: calc(100% + 8px); left: 0; z-index: 25; width: min(310px, calc(100vw - 18px)); padding: 15px; border: 1px solid rgba(212,174,98,.34); border-radius: 13px; background: rgba(4,24,18,.98); box-shadow: 0 18px 48px rgba(0,0,0,.52); backdrop-filter: blur(12px); animation: countPanelIn .18s ease-out both; }
+.strategyPanel header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.strategyPanel header > span { display: flex; flex-direction: column; }
+.strategyPanel header small { color: #8da197; font-size: 8px; font-weight: 750; text-transform: uppercase; letter-spacing: .12em; }
+.strategyPanel header strong { margin-top: 2px; color: #f2d28d; font: 400 26px/1 Georgia, serif; }
+.strategyPanel header > b { padding: 5px 8px; border: 1px solid rgba(255,255,255,.1); border-radius: 7px; color: #d8e0db; font-size: 10px; white-space: nowrap; }
+.strategyPanel p { margin: 12px 0 10px; color: #c4d0c9; font-size: 12px; line-height: 1.5; }
+.strategyPanel .strategyFallback { display: block; margin: -3px 0 10px; color: #e0bf78; font-size: 10px; }
+.strategyPanel footer { padding-top: 9px; border-top: 1px solid rgba(255,255,255,.07); color: #70857a; font-size: 8px; line-height: 1.4; text-transform: uppercase; letter-spacing: .07em; }
+.strategyPanel .strategyWaiting { margin: 0; color: #9aac9f; }
 .cardCountPanel { position: absolute; top: calc(100% + 8px); left: 0; z-index: 20; width: 290px; padding: 14px; border: 1px solid rgba(212,174,98,.28); border-radius: 13px; background: rgba(4,24,18,.97); box-shadow: 0 18px 45px rgba(0,0,0,.48); backdrop-filter: blur(12px); animation: countPanelIn .18s ease-out both; }
 .cardCountPanel > header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
 .cardCountPanel > header strong { color: #e5e9e6; font-size: 12px; }
@@ -328,13 +345,11 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .playingCard.cardMotionDealer { animation-name: dealToDealer; }
 .playingCard.cardMotionPlayer { animation-name: dealToPlayer; }
 .playingCard.cardReveal { transform-origin: 50% 50%; animation: flipReveal .56s cubic-bezier(.3,.7,.2,1) both; }
-.playingCard.cardBounce { animation: cardBounce .3s cubic-bezier(.2,.85,.3,1.35) both; animation-delay: 0ms !important; }
 .splitHands .playerHand:nth-child(2) .playingCard:last-child { animation-delay: .14s; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(-18px) rotate(-2deg); } to { opacity: 1; transform: none; } }
 @keyframes dealToDealer { from { opacity: .25; transform: translate(150px, -70px) rotate(10deg) scale(.92); } to { opacity: 1; transform: none; } }
 @keyframes dealToPlayer { from { opacity: .25; transform: translate(165px, -180px) rotate(13deg) scale(.92); } to { opacity: 1; transform: none; } }
 @keyframes flipReveal { 0% { opacity: .5; transform: perspective(500px) rotateY(-90deg) scale(.96); } 60% { transform: perspective(500px) rotateY(8deg) scale(1.02); } 100% { opacity: 1; transform: perspective(500px) rotateY(0) scale(1); } }
-@keyframes cardBounce { 0%, 100% { transform: translateY(0) scale(1); } 42% { transform: translateY(-8px) scale(1.035); } 72% { transform: translateY(1px) scale(.995); } }
 .cardFace { background: linear-gradient(140deg, #fffef9, #e9e6dd); color: #151a17; border: 1px solid rgba(0,0,0,.14); }
 .redCard { color: #b73f3f; }
 .cardCorner { position: absolute; top: 7px; left: 8px; display: flex; flex-direction: column; align-items: center; font-family: Georgia, serif; line-height: .85; }
@@ -579,7 +594,9 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 
   .tableScreen { min-height: calc(100dvh - 62px); grid-template-rows: 72px minmax(135px, .92fr) 40px minmax(190px, 1.14fr) auto; padding: 11px 9px max(9px, env(safe-area-inset-bottom)); }
   .tableRail { left: -12%; right: -12%; top: 25px; height: 69%; }
-  .cardCountToggle { height: 30px; margin-top: 7px; }
+  .tableUtilityRow { width: min(270px, calc(100vw - 78px)); margin-top: 7px; }
+  .cardCountToggle, .strategyToggle { height: 30px; padding-inline: 7px; font-size: 9px; }
+  .strategyPanel { left: -36px; }
   .cardCountPanel { width: min(276px, calc(100vw - 18px)); padding: 12px; }
   .cardCountGrid > span { min-height: 40px; padding: 0 8px; }
   .playingCard { width: clamp(67px, 20vw, 78px); border-radius: 7px; }
