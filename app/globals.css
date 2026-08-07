@@ -233,7 +233,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomLocalPlayer .roomPlayerAvatar { width: 34px; height: 34px; flex-basis: 34px; font-size: 16px; }
 .roomLocalPlayer .roomPlayerBalance { font-size: 13px; }
 .roomHands { display: flex; align-items: flex-start; justify-content: center; gap: 7px; margin-top: 8px; }
-.roomLocalHands { gap: clamp(8px, 2vw, 22px); margin-top: 10px; }
+.roomLocalHands { max-width: 100%; justify-content: safe center; gap: clamp(8px, 2vw, 22px); margin-top: 10px; overflow-x: auto; padding: 5px 8px 8px; scrollbar-width: thin; scrollbar-color: rgba(212,174,98,.35) transparent; }
 .roomHand { display: flex; flex-direction: column; align-items: center; position: relative; }
 .roomHand.activeRoomHand::before { content: ""; position: absolute; inset: 3px -8px 12px; z-index: -1; border: 2px solid rgba(255,216,126,.88); border-radius: 13px; background: rgba(240,193,99,.055); box-shadow: 0 0 0 2px rgba(240,193,99,.12), 0 0 22px rgba(240,193,99,.25); }
 .roomHand.activeRoomHand::after { content: ""; position: absolute; left: 8%; right: 8%; bottom: -7px; height: 4px; border-radius: 3px; background: #ffda83; box-shadow: 0 0 13px rgba(255,218,131,.95); }
@@ -315,6 +315,8 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .playingCard { width: clamp(74px, 7vw, 91px); aspect-ratio: .69; position: relative; border-radius: 8px; box-shadow: 0 10px 19px rgba(0,0,0,.29), 0 2px 3px rgba(0,0,0,.35); backface-visibility: hidden; animation: cardIn .42s cubic-bezier(.18,.78,.28,1) both; will-change: transform, opacity; }
 .dealerCards .playingCard { animation-name: dealToDealer; }
 .playerZone .playingCard { animation-name: dealToPlayer; }
+.playingCard.cardMotionDealer { animation-name: dealToDealer; }
+.playingCard.cardMotionPlayer { animation-name: dealToPlayer; }
 .playingCard.cardReveal { transform-origin: 50% 50%; animation: flipReveal .56s cubic-bezier(.3,.7,.2,1) both; }
 .splitHands .playerHand:nth-child(2) .playingCard:last-child { animation-delay: .14s; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(-18px) rotate(-2deg); } to { opacity: 1; transform: none; } }
@@ -354,6 +356,8 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .cutCardAlert i { width: 7px; height: 14px; border-radius: 2px; background: #dc695d; box-shadow: 0 0 10px rgba(220,105,93,.55); }
 
 .playerZone { flex-direction: row; gap: clamp(20px, 8vw, 110px); align-items: flex-start; padding-top: 9px; }
+.playerZone.splitHands { width: 100%; justify-content: safe center; gap: clamp(8px, 2vw, 24px); overflow-x: auto; padding-inline: 18px; scrollbar-width: thin; scrollbar-color: rgba(212,174,98,.35) transparent; }
+.splitHands .playerHand { flex: 0 0 auto; scroll-snap-align: center; }
 .playerHand { min-width: 100px; position: relative; display: flex; flex-direction: column; align-items: center; transition: .2s ease; }
 .playerHand.active { filter: drop-shadow(0 10px 14px rgba(212,174,98,.12)); }
 .playerHand.active::before { content: ""; position: absolute; inset: 25px -19px 15px; border: 1px solid rgba(212,174,98,.24); border-radius: 16px; z-index: -1; }
@@ -559,6 +563,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .gameMessage { min-height: 45px; max-width: 94vw; padding: 8px 18px; font-size: 19px; }
   .sideBetCelebration { padding-left: 19px; padding-right: 19px; }
   .playerZone { gap: 26px; padding-top: 5px; }
+  .playerZone.splitHands { justify-content: flex-start; gap: 10px; padding-inline: 12px; scroll-snap-type: x proximity; }
   .splitHands .playingCard { width: 62px; }
   .splitHands .cardFan { padding-left: 12px; }
   .splitHands .cardFan .playingCard { margin-left: -12px; }

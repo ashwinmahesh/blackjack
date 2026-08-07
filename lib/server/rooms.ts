@@ -5,6 +5,7 @@ import {
   createShoe,
   DECK_COUNT,
   isBlackjack,
+  MAX_SPLITS,
   playDealer,
   scoreHand,
   type Card,
@@ -483,22 +484,36 @@ export function roomAction(
     hand.result = "SURRENDER";
     advanceTurn(room);
   } else if (action === "split") {
-    if (player.hands.length !== 1 || !canSplit(hand.cards) || player.bankroll < hand.bet) {
+    const splitCount = player.hands.length - 1;
+    if (
+      splitCount >= MAX_SPLITS ||
+      !canSplit(hand.cards) ||
+      player.bankroll < hand.bet
+    ) {
       throw new RoomError("This hand cannot split", 409);
     }
     player.bankroll -= hand.bet;
     const firstCards = [hand.cards[0], draw(room.shoe)];
     const secondCards = [hand.cards[1], draw(room.shoe)];
     const splitAces = hand.cards[0].rank === "A";
-    player.hands = [firstCards, secondCards].map((cards) => ({
+    const splitHands: RoomHand[] = [firstCards, secondCards].map((cards) => ({
       cards,
       bet: hand.bet,
       status: splitAces || scoreHand(cards).total === 21 ? "standing" : "active",
     }));
-    player.activeHand = player.hands.findIndex((candidate) => candidate.status === "active");
-    if (player.activeHand === -1) {
-      player.activeHand = 0;
+    const splitIndex = player.activeHand;
+    player.hands = [
+      ...player.hands.slice(0, splitIndex),
+      ...splitHands,
+      ...player.hands.slice(splitIndex + 1),
+    ];
+    const firstActiveSplit = splitHands.findIndex((candidate) => candidate.status === "active");
+    if (firstActiveSplit === -1) {
+      player.activeHand = splitIndex;
       advanceTurn(room);
+    } else {
+      player.activeHand = splitIndex + firstActiveSplit;
+      room.message = `${player.name} plays hand ${player.activeHand + 1}`;
     }
   }
 

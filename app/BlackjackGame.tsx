@@ -10,6 +10,7 @@ import {
   DECK_COUNT,
   dealerShouldHit,
   isBlackjack,
+  MAX_SPLITS,
   playDealer,
   scoreHand,
   scoreMatchDealer,
@@ -301,14 +302,31 @@ function PlayingCard({
   card,
   hidden = false,
   revealed = false,
+  motion,
+  delayMs = 0,
 }: {
   card?: CardType;
   hidden?: boolean;
   revealed?: boolean;
+  motion?: "dealer" | "player";
+  delayMs?: number;
 }) {
+  const motionClass = motion === "dealer"
+    ? "cardMotionDealer"
+    : motion === "player"
+      ? "cardMotionPlayer"
+      : "";
+  const motionStyle = delayMs
+    ? ({ animationDelay: `${delayMs}ms` } as CSSProperties)
+    : undefined;
+
   if (hidden || !card) {
     return (
-      <div className="playingCard cardBack" aria-label="Face-down card">
+      <div
+        className={`playingCard cardBack ${motionClass}`}
+        style={motionStyle}
+        aria-label="Face-down card"
+      >
         <span className="backFrame">
           <span>DE</span>
         </span>
@@ -319,7 +337,10 @@ function PlayingCard({
   const isRed = card.suit === "hearts" || card.suit === "diamonds";
   const mark = SUIT_MARKS[card.suit];
   return (
-    <div className={`playingCard cardFace ${isRed ? "redCard" : "blackCard"} ${revealed ? "cardReveal" : ""}`}>
+    <div
+      className={`playingCard cardFace ${isRed ? "redCard" : "blackCard"} ${motionClass} ${revealed ? "cardReveal" : ""}`}
+      style={motionStyle}
+    >
       <span className="cardCorner">
         <strong>{card.rank}</strong>
         <span>{mark}</span>
@@ -370,7 +391,14 @@ function RoomPlayerSeat({
               key={handIndex}
             >
               <div className={isLocal ? "roomLocalCardFan" : "miniCardFan"}>
-                {hand.cards.map((card) => <PlayingCard card={card} key={card.id} />)}
+                {hand.cards.map((card, cardIndex) => (
+                  <PlayingCard
+                    card={card}
+                    delayMs={cardIndex * 110 + handIndex * 45}
+                    key={card.id}
+                    motion="player"
+                  />
+                ))}
               </div>
               <small>{scoreHand(hand.cards).total} · bet {tokenAmount(hand.bet)}</small>
               {hand.result ? <b className={hand.result === "BUST" ? "bust" : ""}>{hand.result}</b> : null}
@@ -490,6 +518,7 @@ export default function BlackjackGame() {
   const gameRef = useRef<GameState | null>(null);
   const soundEnabledRef = useRef(true);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const previousRoomRef = useRef<RoomView | null>(null);
   const previousAchievementBalanceRef = useRef<number | null>(null);
   const previousAchievementSourceRef = useRef("");
   const achievementQueueRef = useRef<number[]>([]);
@@ -589,12 +618,23 @@ export default function BlackjackGame() {
     };
   }, [activeRoomCode]);
 
+  const unlockAudio = useCallback(() => {
+    if (!soundEnabledRef.current || typeof window === "undefined") return null;
+    try {
+      const context = audioContextRef.current ?? new AudioContext();
+      audioContextRef.current = context;
+      if (context.state === "suspended") void context.resume();
+      return context;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const playCardSound = useCallback((kind: "deal" | "flip" | "win" | "blackjack" | "achievement" | "lose" | "shuffle" | "chip") => {
     if (!soundEnabledRef.current || typeof window === "undefined") return;
 
-    const context = audioContextRef.current ?? new AudioContext();
-    audioContextRef.current = context;
-    if (context.state === "suspended") void context.resume();
+    const context = unlockAudio();
+    if (!context) return;
 
     if (kind === "win") {
       const winChime = [
@@ -749,7 +789,72 @@ export default function BlackjackGame() {
     filter.connect(gain);
     gain.connect(context.destination);
     source.start();
-  }, []);
+  }, [unlockAudio]);
+
+  useEffect(() => {
+    const nextRoom = roomSession?.room ?? null;
+    const previousRoom = previousRoomRef.current;
+    previousRoomRef.current = nextRoom;
+
+    if (!nextRoom || !previousRoom || previousRoom.code !== nextRoom.code) return;
+    if (previousRoom.version === nextRoom.version) return;
+
+    const previousCardIds = new Set(
+      previousRoom.players.flatMap((player) =>
+        player.hands.flatMap((hand) => hand.cards.map((card) => card.id)),
+      ),
+    );
+    const addedPlayerCards = nextRoom.players.reduce(
+      (total, player) => total + player.hands.reduce(
+        (handTotal, hand) =>
+          handTotal + hand.cards.filter((card) => !previousCardIds.has(card.id)).length,
+        0,
+      ),
+      0,
+    );
+    const addedDealerCards = Math.max(0, nextRoom.dealer.length - previousRoom.dealer.length);
+    const dealSoundCount = addedPlayerCards + addedDealerCards;
+    const holeRevealed = Boolean(
+      previousRoom.dealer.length > 1 &&
+      previousRoom.dealer[1] === null &&
+      nextRoom.dealer[1],
+    );
+    const shuffled = nextRoom.shoeRemaining > previousRoom.shoeRemaining;
+    const soundSpacing = 115;
+    const dealSoundStart = holeRevealed ? 160 : 0;
+
+    if (shuffled) playCardSound("shuffle");
+    if (holeRevealed) playCardSound("flip");
+    for (let index = 0; index < dealSoundCount; index += 1) {
+      window.setTimeout(
+        () => playCardSound("deal"),
+        dealSoundStart + index * soundSpacing,
+      );
+    }
+
+    const previousPlayer = previousRoom.players.find(
+      (player) => player.id === roomSession?.seatId,
+    );
+    const nextPlayer = nextRoom.players.find((player) => player.id === roomSession?.seatId);
+    const previousResults = new Set(
+      previousPlayer?.hands
+        .filter((hand) => hand.result)
+        .map((hand) => `${hand.cards.map((card) => card.id).join(",")}:${hand.result}`) ?? [],
+    );
+    const newResults = nextPlayer?.hands.filter(
+      (hand) => hand.result &&
+        !previousResults.has(`${hand.cards.map((card) => card.id).join(",")}:${hand.result}`),
+    ) ?? [];
+    const resultDelay = dealSoundStart + dealSoundCount * soundSpacing + 120;
+
+    if (newResults.some((hand) => hand.result === "BLACKJACK")) {
+      window.setTimeout(() => playCardSound("blackjack"), resultDelay);
+    } else if (newResults.some((hand) => ["WIN", "DEALER BUST"].includes(hand.result ?? ""))) {
+      window.setTimeout(() => playCardSound("win"), resultDelay);
+    } else if (newResults.some((hand) => ["BUST", "DEALER WINS", "DEALER BLACKJACK"].includes(hand.result ?? ""))) {
+      window.setTimeout(() => playCardSound("lose"), resultDelay);
+    }
+  }, [playCardSound, roomSession]);
 
   const showTableBust = useCallback((balance: number, minimum: number) => {
     setTableBustNotice({ id: Date.now(), balance, minimum });
@@ -844,7 +949,7 @@ export default function BlackjackGame() {
     game &&
       activeHand &&
       game.phase === "playing" &&
-      game.hands.length === 1 &&
+      game.hands.length - 1 < MAX_SPLITS &&
       canSplit(activeHand.cards),
   );
   const splitAvailable = Boolean(
@@ -1249,7 +1354,10 @@ export default function BlackjackGame() {
     setGame((current) => {
       if (!current || current.phase !== "playing") return current;
       const original = current.hands[current.activeHand];
-      if (current.hands.length !== 1 || !canSplit(original.cards)) {
+      if (
+        current.hands.length - 1 >= MAX_SPLITS ||
+        !canSplit(original.cards)
+      ) {
         return current;
       }
       if (current.bankroll < original.bet) {
@@ -1266,7 +1374,7 @@ export default function BlackjackGame() {
       const firstCards = [original.cards[0], firstDealtCard];
       const secondCards = [original.cards[1], secondDealtCard];
       const splitAces = original.cards[0].rank === "A";
-      const hands: PlayerHand[] = [firstCards, secondCards].map((cards) => ({
+      const splitHands: PlayerHand[] = [firstCards, secondCards].map((cards) => ({
         cards,
         bet: original.bet,
         status:
@@ -1274,21 +1382,29 @@ export default function BlackjackGame() {
             ? ("standing" as const)
             : ("active" as const),
       }));
-      const firstActive = hands.findIndex((hand) => hand.status === "active");
+      const splitIndex = current.activeHand;
+      const hands = [
+        ...current.hands.slice(0, splitIndex),
+        ...splitHands,
+        ...current.hands.slice(splitIndex + 1),
+      ];
+      const firstActiveSplit = splitHands.findIndex((hand) => hand.status === "active");
+      const nextActiveHand =
+        firstActiveSplit === -1 ? splitIndex : splitIndex + firstActiveSplit;
       const next = {
         ...current,
         bankroll: current.bankroll - original.bet,
         shoe,
         seenCardCounts: addSeenCards(current.seenCardCounts, [firstDealtCard, secondDealtCard]),
         hands,
-        activeHand: Math.max(0, firstActive),
+        activeHand: nextActiveHand,
         message: splitAces
           ? "Split aces receive one card each"
-          : `Playing hand ${Math.max(0, firstActive) + 1}`,
+          : `Playing hand ${nextActiveHand + 1}`,
         tone: "neutral" as const,
       };
 
-      return firstActive === -1 ? advanceOrSettle(next) : next;
+      return firstActiveSplit === -1 ? advanceOrSettle(next) : next;
     });
   }
 
@@ -1484,6 +1600,7 @@ export default function BlackjackGame() {
     amount?: number,
   ) {
     if (!roomSession || roomBusy) return;
+    unlockAudio();
     setRoomBusy(true);
     setRoomError("");
     try {
@@ -1687,7 +1804,14 @@ export default function BlackjackGame() {
             <div className="zoneLabel"><span>Dealer</span></div>
             <div className="cardFan dealerCards">
               {roomSession.room.dealer.length ? roomSession.room.dealer.map((card, index) => (
-                <PlayingCard card={card ?? undefined} hidden={!card} key={card?.id ?? `hole-${index}`} />
+                <PlayingCard
+                  card={card ?? undefined}
+                  delayMs={roomSession.room.phase === "settled" ? Math.max(0, index - 1) * 140 : index * 115}
+                  hidden={!card}
+                  key={card?.id ?? `hole-${index}`}
+                  motion="dealer"
+                  revealed={index === 1 && Boolean(card) && roomSession.room.phase === "settled"}
+                />
               )) : <div className="emptyDealerMark"><span>◆</span></div>}
             </div>
           </div>
@@ -1761,8 +1885,8 @@ export default function BlackjackGame() {
                   <button type="button" onClick={() => sendRoomAction("stand")}><small>S</small><span>Stand</span></button>
                   <button className="primaryAction" type="button" onClick={() => sendRoomAction("hit")}><small>H</small><span>Hit</span></button>
                   <button type="button" onClick={() => sendRoomAction("double")} disabled={!roomActiveHand || roomActiveHand.cards.length !== 2 || (roomPlayer?.bankroll ?? 0) < (roomActiveHand?.bet ?? 0)}><small>2×</small><span>Double</span></button>
-                  <button type="button" onClick={() => sendRoomAction("split")} disabled={!roomActiveHand || !canSplit(roomActiveHand.cards) || (roomPlayer?.bankroll ?? 0) < (roomActiveHand?.bet ?? 0)}><small>Ⅱ</small><span>Split</span></button>
-                  <button type="button" onClick={() => sendRoomAction("surrender")} disabled={!roomActiveHand || roomActiveHand.cards.length !== 2}><small>½</small><span>Surrender</span></button>
+                  <button type="button" onClick={() => sendRoomAction("split")} disabled={!roomActiveHand || !canSplit(roomActiveHand.cards) || (roomPlayer?.hands.length ?? 1) - 1 >= MAX_SPLITS || (roomPlayer?.bankroll ?? 0) < (roomActiveHand?.bet ?? 0)}><small>Ⅱ</small><span>Split</span></button>
+                  <button type="button" onClick={() => sendRoomAction("surrender")} disabled={!roomActiveHand || roomActiveHand.cards.length !== 2 || (roomPlayer?.hands.length ?? 0) !== 1}><small>½</small><span>Surrender</span></button>
                 </div>
               ) : <strong>Waiting for {roomSession.room.players.find((player) => player.id === roomSession.room.currentPlayerId)?.name}</strong>
             ) : isRoomHost ? (
