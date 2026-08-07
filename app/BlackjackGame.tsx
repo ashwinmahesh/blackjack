@@ -967,6 +967,7 @@ export default function BlackjackGame() {
     [game],
   );
   const cutCardReached = Boolean(game && game.shoe.length <= game.cutPoint);
+  const tableBusted = Boolean(game && game.bankroll < selectedTable.minimum);
   const roomPlayer = roomSession?.room.players.find(
     (player) => player.id === roomSession.seatId,
   );
@@ -1488,6 +1489,36 @@ export default function BlackjackGame() {
             : "You’re below this table’s minimum",
         tone: "neutral",
         round: current.round + 1,
+      };
+    });
+  }
+
+  function resetTableBankroll() {
+    setWallet(RESET_BALANCE);
+    window.localStorage.setItem(WALLET_KEY, String(RESET_BALANCE));
+    setGame((current) => {
+      if (!current) return current;
+      const needsFreshShoe = current.shoe.length <= current.cutPoint;
+      if (needsFreshShoe) playCardSound("shuffle");
+      return {
+        ...current,
+        bankroll: RESET_BALANCE,
+        startingBankroll: RESET_BALANCE,
+        currentBet: selectedTable.minimum,
+        sideBets: { ...EMPTY_SIDE_BETS },
+        seenCardCounts: needsFreshShoe
+          ? emptySeenCardCounts()
+          : current.seenCardCounts,
+        dealerHoleSeen: false,
+        shoe: needsFreshShoe ? createShoe(DECK_COUNT) : current.shoe,
+        cutPoint: needsFreshShoe ? createCutPoint() : current.cutPoint,
+        dealer: [],
+        hands: [],
+        activeHand: 0,
+        phase: "betting",
+        message: "Bankroll reset — place your bet",
+        tone: "neutral",
+        round: current.phase === "settled" ? current.round + 1 : current.round,
       };
     });
   }
@@ -2128,13 +2159,12 @@ export default function BlackjackGame() {
                 <button
                   className="dealButton"
                   type="button"
-                  onClick={game.bankroll >= selectedTable.minimum ? dealRound : () => setGame(null)}
+                  onClick={tableBusted ? resetTableBankroll : dealRound}
                   disabled={
-                    game.bankroll >= selectedTable.minimum &&
-                    game.currentBet < selectedTable.minimum
+                    !tableBusted && game.currentBet < selectedTable.minimum
                   }
                 >
-                  {game.bankroll >= selectedTable.minimum ? "Deal cards" : "Reset to 1,000"}<span>→</span>
+                  {tableBusted ? "Reset" : <>Deal cards<span>→</span></>}
                 </button>
               </div>
             ) : game.phase === "playing" ? (
@@ -2185,8 +2215,14 @@ export default function BlackjackGame() {
                     {tokenAmount(game.bankroll - game.startingBankroll)}
                   </strong>
                 </div>
-                <button className="dealButton" type="button" onClick={nextRound}>
-                  {cutCardReached ? "Shuffle shoe" : "Next hand"} <span>→</span>
+                <button
+                  className="dealButton"
+                  type="button"
+                  onClick={tableBusted ? resetTableBankroll : nextRound}
+                >
+                  {tableBusted
+                    ? "Reset"
+                    : <>{cutCardReached ? "Shuffle shoe" : "Next hand"} <span>→</span></>}
                 </button>
               </div>
             )}
