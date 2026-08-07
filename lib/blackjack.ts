@@ -67,8 +67,8 @@ export function createShoe(decks = DECK_COUNT, random = Math.random): Card[] {
 }
 
 export function createCutPoint(totalCards = SHOE_SIZE, random = Math.random): number {
-  // Place the cut card 55–80% of the way through the shoe.
-  const penetration = 0.55 + random() * 0.25;
+  // Place the cut card 55–90% of the way through the shoe.
+  const penetration = 0.55 + random() * 0.35;
   return Math.floor(totalCards * (1 - penetration));
 }
 

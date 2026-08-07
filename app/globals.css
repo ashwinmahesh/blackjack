@@ -424,6 +424,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .betSpotRing { width: 150px; height: 150px; border: 1px solid rgba(212,174,98,.28); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(212,174,98,.09), transparent 68%); box-shadow: 0 0 0 5px rgba(212,174,98,.025), inset 0 0 24px rgba(0,0,0,.14); }
 .betSpotRing span, .betSpotRing small { color: #b2c0b8; text-transform: uppercase; font-size: 12px; font-weight: 700; letter-spacing: .1em; }
 .betSpotRing strong { font-family: Georgia, serif; font-size: 34px; font-weight: 400; color: #fff6e2; margin: 3px 0; font-variant-numeric: tabular-nums; }
+.betSpotRing small { max-width: 132px; font-size: 8px; letter-spacing: .045em; white-space: nowrap; }
 .shuffleVisual { width: 180px; height: 138px; position: relative; display: grid; place-items: end center; padding-bottom: 3px; }
 .shuffleVisual span { position: absolute; top: 13px; width: 73px; height: 101px; border: 4px solid #e9e2cc; border-radius: 8px; background: repeating-linear-gradient(45deg, #0d382b 0 6px, #1a4b3b 6px 8px); box-shadow: 0 10px 17px rgba(0,0,0,.28); animation: shuffleCard 1.05s ease-in-out infinite; }
 .shuffleVisual span:nth-child(2) { animation-delay: -.22s; }
@@ -498,6 +499,26 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .sidePaytables strong { color: #e8dfca; font-size: 12px; }
 .sidePaytables span { color: #9aaba2; font-size: 10px; line-height: 1.55; }
 .rulesSheet .practiceNote { color: #667b6f; font-size: 9px; text-transform: uppercase; letter-spacing: .13em; }
+.settingsSheet { width: min(470px, 100%); position: relative; padding: 31px; border: 1px solid rgba(212,174,98,.25); border-radius: 20px; background: linear-gradient(145deg, #103126, #081b15); box-shadow: 0 30px 90px rgba(0,0,0,.55); }
+.settingsSheet h2 { margin: 9px 0 8px; font: 400 32px/1.1 Georgia, serif; }
+.settingsSheet > p { margin: 0 0 22px; color: #a6b5ad; font-size: 13px; line-height: 1.55; }
+.handCountOptions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.handCountOptions > button { min-height: 126px; padding: 13px 8px 11px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,.09); border-radius: 13px; background: rgba(3,16,12,.45); color: #879b90; cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+.handCountOptions > button:hover { transform: translateY(-2px); border-color: rgba(212,174,98,.35); }
+.handCountOptions > button.selected { border-color: rgba(226,190,115,.72); background: rgba(212,174,98,.1); color: #f0d391; box-shadow: inset 0 0 0 1px rgba(212,174,98,.12); }
+.handCountOptions > button > span { width: 68px; height: 46px; position: relative; display: block; }
+.handCountOptions > button > span i { width: 29px; height: 42px; position: absolute; left: 50%; top: 1px; border: 2px solid #d9d1b9; border-radius: 4px; background: repeating-linear-gradient(45deg, #103d30 0 4px, #1d5743 4px 5px); box-shadow: 0 4px 7px rgba(0,0,0,.25); transform: translateX(-50%); }
+.handCountOptions > button:nth-child(2) > span i:first-child { transform: translateX(calc(-50% - 7px)) rotate(-4deg); }
+.handCountOptions > button:nth-child(2) > span i:nth-child(2) { transform: translateX(calc(-50% + 7px)) rotate(4deg); }
+.handCountOptions > button:nth-child(3) > span i:first-child { transform: translateX(calc(-50% - 13px)) rotate(-6deg); }
+.handCountOptions > button:nth-child(3) > span i:nth-child(3) { transform: translateX(calc(-50% + 13px)) rotate(6deg); }
+.handCountOptions strong { margin-top: 5px; color: #f1eee5; font: 500 24px/1 Georgia, serif; }
+.handCountOptions small { margin-top: 4px; font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .14em; }
+.handCountStatus { margin-top: 14px; padding: 11px 13px; display: flex; flex-direction: column; gap: 3px; border-radius: 9px; background: rgba(255,255,255,.035); }
+.handCountStatus strong { color: #e7e3d8; font-size: 12px; }
+.handCountStatus span { color: #82968b; font-size: 10px; line-height: 1.45; }
+.handCountStatus.queued { background: rgba(212,174,98,.08); }
+.handCountStatus.queued strong { color: #e8c77e; }
 .roomSheet { width: min(450px, 100%); position: relative; padding: 31px; border: 1px solid rgba(212,174,98,.25); border-radius: 20px; background: linear-gradient(145deg, #103126, #081b15); box-shadow: 0 30px 90px rgba(0,0,0,.55); }
 .roomSheet h2 { margin: 9px 0 8px; font: 400 32px/1.1 Georgia, serif; }
 .roomSheet > p { margin: 0 0 22px; color: #a6b5ad; font-size: 13px; line-height: 1.55; }
@@ -513,6 +534,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 
 @media (max-width: 700px) {
   .topBar { height: 62px; padding: 0 14px; }
+  .topActions { gap: 6px; }
   .brandMark { width: 32px; height: 32px; }
   .brandWords strong { font-size: 16px; }
   .balancePill { height: 38px; min-width: 103px; padding-right: 11px; }
@@ -656,9 +678,12 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .playControls button small { width: 25px; height: 25px; font-size: 11px; }
   .playControls button span { font-size: 12px; letter-spacing: .035em; }
   .rulesSheet { padding: 28px 23px; }
+  .settingsSheet { padding: 28px 21px; }
 }
 
 @media (max-width: 390px) {
+  .brand { gap: 0; }
+  .brandMark { display: none; }
   .brandWords small { display: none; }
   .balancePill { min-width: 89px; }
   .balancePill small { display: none; }

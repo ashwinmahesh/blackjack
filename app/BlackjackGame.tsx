@@ -31,6 +31,7 @@ type HandStatus = "active" | "standing" | "busted" | "won" | "lost" | "push" | "
 type SideBetKey = "perfectPairs" | "twentyOnePlusThree" | "matchDealer";
 type SideBets = Record<SideBetKey, number>;
 type SeenCardCounts = Record<CardType["rank"], number>;
+type SoloHandCount = 1 | 2 | 3;
 type SoundKind = "deal" | "flip" | "win" | "sidebet" | "blackjack" | "achievement" | "lose" | "tableBust" | "shuffle" | "chip" | "entry" | "click";
 type NavigatorWithAudioSession = Navigator & {
   audioSession?: { type: "auto" | "playback" | "transient" | "transient-solo" | "ambient" | "play-and-record" };
@@ -47,6 +48,7 @@ type PlayerHand = {
   bet: number;
   status: HandStatus;
   result?: string;
+  fromSplit?: boolean;
 };
 
 type GameState = {
@@ -60,6 +62,7 @@ type GameState = {
   cutPoint: number;
   dealer: CardType[];
   hands: PlayerHand[];
+  startingHandCount: SoloHandCount;
   activeHand: number;
   phase: Phase;
   message: string;
@@ -112,6 +115,7 @@ const TABLES = [
 ] as const;
 const WALLET_KEY = "dealers-edge-token-balance";
 const ACHIEVEMENTS_KEY = "dealers-edge-token-achievements-v2";
+const SOLO_HAND_COUNT_KEY = "ashwins-blackjack-solo-hand-count";
 const RESET_BALANCE = 500;
 const LOWEST_TABLE_MINIMUM = TABLES[0].minimum;
 const ACHIEVEMENT_THRESHOLDS = [
@@ -183,6 +187,10 @@ function sideBetStake(sideBets: SideBets) {
   return Object.values(sideBets).reduce((total, wager) => total + wager, 0);
 }
 
+function totalOpeningStake(mainBet: number, sideBets: SideBets, handCount: number) {
+  return (mainBet + sideBetStake(sideBets)) * handCount;
+}
+
 function settleSideBets(
   playerCards: CardType[],
   dealerUpCard: CardType,
@@ -230,7 +238,7 @@ function settleSideBets(
 
 function settleRound(state: GameState): GameState {
   const hasLiveHand = state.hands.some(
-    (hand) => hand.status !== "busted" && scoreHand(hand.cards).total <= 21,
+    (hand) => ["active", "standing"].includes(hand.status) && scoreHand(hand.cards).total <= 21,
   );
   const dealerPlay = hasLiveHand
     ? playDealer(state.dealer, state.shoe)
@@ -243,6 +251,15 @@ function settleRound(state: GameState): GameState {
 
   const hands = state.hands.map((hand) => {
     const playerScore = scoreHand(hand.cards).total;
+
+    if (hand.result === "BLACKJACK") {
+      won += 1;
+      return hand;
+    }
+    if (hand.status === "surrendered") {
+      lost += 1;
+      return hand;
+    }
 
     if (hand.status === "busted" || playerScore > 21) {
       lost += 1;
@@ -507,6 +524,15 @@ function SoundIcon({ muted }: { muted: boolean }) {
   );
 }
 
+function SettingsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 8.95 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.58 15 1.7 1.7 0 0 0 3 14H3v-4h.08A1.7 1.7 0 0 0 4.6 8.95a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 8.97 4.6 1.7 1.7 0 0 0 10 3.08V3h4v.08a1.7 1.7 0 0 0 1.05 1.52 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06a1.7 1.7 0 0 0-.34 1.88A1.7 1.7 0 0 0 20.92 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z" />
+    </svg>
+  );
+}
+
 function GitHubIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -615,6 +641,8 @@ export default function BlackjackGame() {
   const [selectedTableId, setSelectedTableId] = useState<string>(TABLES[0].id);
   const [game, setGame] = useState<GameState | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [soloHandCount, setSoloHandCount] = useState<SoloHandCount>(1);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [roomMode, setRoomMode] = useState<"create" | "join" | null>(null);
   const [roomName, setRoomName] = useState("");
@@ -641,6 +669,7 @@ export default function BlackjackGame() {
   } | null>(null);
   const gameRef = useRef<GameState | null>(null);
   const soundEnabledRef = useRef(true);
+  const soloHandCountRef = useRef<SoloHandCount>(1);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioNeedsRebuildRef = useRef(false);
   const previousRoomRef = useRef<RoomView | null>(null);
@@ -677,7 +706,13 @@ export default function BlackjackGame() {
         // A malformed cache should not prevent the game from loading.
       }
       const initialAchievements = [...new Set(storedAchievements)];
+      const storedHandCount = Number(window.localStorage.getItem(SOLO_HAND_COUNT_KEY));
+      const initialHandCount: SoloHandCount = storedHandCount === 2 || storedHandCount === 3
+        ? storedHandCount
+        : 1;
       setWallet(startingBalance);
+      soloHandCountRef.current = initialHandCount;
+      setSoloHandCount(initialHandCount);
       setUnlockedAchievements(initialAchievements);
       setAchievementsLoaded(true);
       previousAchievementBalanceRef.current = startingBalance;
@@ -712,6 +747,10 @@ export default function BlackjackGame() {
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
+
+  useEffect(() => {
+    soloHandCountRef.current = soloHandCount;
+  }, [soloHandCount]);
 
   useEffect(() => {
     if (!sideBetCelebration) return;
@@ -1164,7 +1203,9 @@ export default function BlackjackGame() {
       const dealer = [...startingState!.dealer];
       const shoe = [...startingState!.shoe];
       const hasLiveHand = startingState!.hands.some(
-        (hand) => hand.status !== "busted" && scoreHand(hand.cards).total <= 21,
+        (hand) =>
+          ["active", "standing"].includes(hand.status) &&
+          scoreHand(hand.cards).total <= 21,
       );
 
       while (hasLiveHand && dealerShouldHit(dealer)) {
@@ -1227,8 +1268,8 @@ export default function BlackjackGame() {
     game &&
       activeHand &&
       game.phase === "playing" &&
-      game.hands.length === 1 &&
-      activeHand.cards.length === 2,
+      activeHand.cards.length === 2 &&
+      !activeHand.fromSplit,
   );
   const strategyAdvice = useMemo(() => {
     if (
@@ -1240,7 +1281,7 @@ export default function BlackjackGame() {
     return getBasicStrategyAdvice(activeHand.cards, game.dealer[0], {
       allowDouble: activeHand.cards.length === 2,
       allowSplit: game.hands.length < MAX_SPLIT_HANDS && canSplit(activeHand.cards),
-      allowSurrender: game.hands.length === 1 && activeHand.cards.length === 2,
+      allowSurrender: activeHand.cards.length === 2 && !activeHand.fromSplit,
     });
   }, [activeHand, game]);
   const shoePercent = useMemo(
@@ -1249,6 +1290,9 @@ export default function BlackjackGame() {
   );
   const cutCardReached = Boolean(game && game.shoe.length <= game.cutPoint);
   const tableBusted = Boolean(game && game.bankroll < selectedTable.minimum);
+  const handCountQueued = Boolean(
+    game && game.phase !== "betting" && game.startingHandCount !== soloHandCount,
+  );
   const roomPlayer = roomSession?.room.players.find(
     (player) => player.id === roomSession.seatId,
   );
@@ -1341,11 +1385,30 @@ export default function BlackjackGame() {
     showTableBust,
   ]);
 
+  function selectSoloHandCount(handCount: SoloHandCount) {
+    playCardSound("click");
+    soloHandCountRef.current = handCount;
+    setSoloHandCount(handCount);
+    window.localStorage.setItem(SOLO_HAND_COUNT_KEY, String(handCount));
+    setGame((current) => {
+      if (!current || current.phase !== "betting") return current;
+      const maximumPerHand = Math.floor(current.bankroll / handCount);
+      const affordableBet =
+        Math.floor(maximumPerHand / selectedTable.minimum) * selectedTable.minimum;
+      const currentBet = Math.min(current.currentBet, affordableBet);
+      const sideBets = totalOpeningStake(currentBet, current.sideBets, handCount) <= current.bankroll
+        ? current.sideBets
+        : { ...EMPTY_SIDE_BETS };
+      return { ...current, startingHandCount: handCount, currentBet, sideBets };
+    });
+  }
+
   function startSession() {
-    if (wallet < selectedTable.minimum) {
-      showTableBust(wallet, selectedTable.minimum);
+    const requiredMinimum = selectedTable.minimum * soloHandCount;
+    if (wallet < requiredMinimum) {
+      if (wallet < selectedTable.minimum) showTableBust(wallet, selectedTable.minimum);
       setHomeNotice(
-        `${selectedTable.name} requires ${tokenAmount(selectedTable.minimum)} tokens. Your balance is ${tokenAmount(wallet)}.`,
+        `${soloHandCount} hands at ${selectedTable.name} require ${tokenAmount(requiredMinimum)} tokens. Your balance is ${tokenAmount(wallet)}.`,
       );
       return;
     }
@@ -1364,6 +1427,7 @@ export default function BlackjackGame() {
       cutPoint: createCutPoint(),
       dealer: [],
       hands: [],
+      startingHandCount: soloHandCount,
       activeHand: 0,
       phase: "betting",
       message: "Place your bet",
@@ -1377,7 +1441,10 @@ export default function BlackjackGame() {
     setGame((current) => {
       if (!current || current.phase !== "betting") return current;
       const nextBet = current.currentBet + amount;
-      if (nextBet + sideBetStake(current.sideBets) > current.bankroll || nextBet < 0) return current;
+      if (
+        totalOpeningStake(nextBet, current.sideBets, current.startingHandCount) > current.bankroll ||
+        nextBet < 0
+      ) return current;
       return { ...current, currentBet: nextBet };
     });
   }
@@ -1389,7 +1456,7 @@ export default function BlackjackGame() {
       const previewBets = { ...game.sideBets, [key]: nextValue };
       if (
         nextValue > currentValue &&
-        game.currentBet + sideBetStake(previewBets) <= game.bankroll
+        totalOpeningStake(game.currentBet, previewBets, game.startingHandCount) <= game.bankroll
       ) {
         playCardSound("chip");
       }
@@ -1399,18 +1466,19 @@ export default function BlackjackGame() {
       const valueIndex = sideBetValues.indexOf(current.sideBets[key]);
       const nextValue = sideBetValues[(valueIndex + 1) % sideBetValues.length];
       const sideBets = { ...current.sideBets, [key]: nextValue };
-      if (current.currentBet + sideBetStake(sideBets) > current.bankroll) return current;
+      if (totalOpeningStake(current.currentBet, sideBets, current.startingHandCount) > current.bankroll) return current;
       return { ...current, sideBets };
     });
   }
 
   async function dealRound() {
     const current = game;
+    const handCount = current?.startingHandCount ?? 1;
     if (
       !current ||
       current.phase !== "betting" ||
       current.currentBet < selectedTable.minimum ||
-      current.currentBet + sideBetStake(current.sideBets) > current.bankroll
+      totalOpeningStake(current.currentBet, current.sideBets, handCount) > current.bankroll
     ) {
       return;
     }
@@ -1421,15 +1489,38 @@ export default function BlackjackGame() {
       if (context.state === "suspended") void context.resume();
     }
 
-    const emergencyShuffle = current.shoe.length < 4;
+    const emergencyShuffle = current.shoe.length < handCount * 2 + 2;
     const shoe = emergencyShuffle ? createShoe(DECK_COUNT) : [...current.shoe];
-    const playerCards = [draw(shoe)];
-    const dealerCards = [draw(shoe)];
-    playerCards.push(draw(shoe));
-    dealerCards.push(draw(shoe));
+    const playerCards: CardType[][] = Array.from({ length: handCount }, () => []);
+    const dealerCards: CardType[] = [];
+    const dealSteps: Array<{
+      recipient: "player" | "dealer";
+      card: CardType;
+      visible: boolean;
+      handIndex?: number;
+    }> = [];
+
+    for (let pass = 0; pass < 2; pass += 1) {
+      for (let handIndex = 0; handIndex < handCount; handIndex += 1) {
+        const card = draw(shoe);
+        playerCards[handIndex].push(card);
+        dealSteps.push({ recipient: "player", card, visible: true, handIndex });
+      }
+      const dealerCard = draw(shoe);
+      dealerCards.push(dealerCard);
+      dealSteps.push({
+        recipient: "dealer",
+        card: dealerCard,
+        visible: pass === 0,
+      });
+    }
+
     const bet = current.currentBet;
-    const openingStake = bet + sideBetStake(current.sideBets);
-    const sideBetResult = settleSideBets(playerCards, dealerCards[0], current.sideBets);
+    const openingStake = totalOpeningStake(bet, current.sideBets, handCount);
+    const sideBetResults = playerCards.map((cards) =>
+      settleSideBets(cards, dealerCards[0], current.sideBets),
+    );
+    const sideBetPayout = sideBetResults.reduce((total, result) => total + result.payout, 0);
     const dealRoundNumber = current.round;
 
     setGame({
@@ -1439,19 +1530,17 @@ export default function BlackjackGame() {
       shoe,
       seenCardCounts: emergencyShuffle ? emptySeenCardCounts() : current.seenCardCounts,
       dealerHoleSeen: false,
-      hands: [{ cards: [], bet, status: "active" }],
+      hands: Array.from({ length: handCount }, () => ({
+        cards: [],
+        bet,
+        status: "active" as const,
+        fromSplit: false,
+      })),
       activeHand: 0,
       phase: "dealing",
       message: "Cards coming out",
       tone: "neutral",
     });
-
-    const dealSteps: Array<{ recipient: "player" | "dealer"; card: CardType; visible: boolean }> = [
-      { recipient: "player", card: playerCards[0], visible: true },
-      { recipient: "dealer", card: dealerCards[0], visible: true },
-      { recipient: "player", card: playerCards[1], visible: true },
-      { recipient: "dealer", card: dealerCards[1], visible: false },
-    ];
 
     for (const step of dealSteps) {
       await pause(DEAL_DELAY);
@@ -1460,13 +1549,15 @@ export default function BlackjackGame() {
       playCardSound("deal");
       setGame((latest) => {
         if (!latest || latest.phase !== "dealing" || latest.round !== dealRoundNumber) return latest;
-        return step.recipient === "player"
+        return step.recipient === "player" && step.handIndex !== undefined
           ? {
               ...latest,
-              seenCardCounts: step.visible
-                ? addSeenCards(latest.seenCardCounts, [step.card])
-                : latest.seenCardCounts,
-              hands: [{ ...latest.hands[0], cards: [...latest.hands[0].cards, step.card] }],
+              seenCardCounts: addSeenCards(latest.seenCardCounts, [step.card]),
+              hands: latest.hands.map((hand, index) =>
+                index === step.handIndex
+                  ? { ...hand, cards: [...hand.cards, step.card] }
+                  : hand,
+              ),
             }
           : {
               ...latest,
@@ -1479,79 +1570,88 @@ export default function BlackjackGame() {
     }
 
     await pause(360);
-    const playerNatural = isBlackjack(playerCards);
+    const naturalHands = playerCards.map((cards) => isBlackjack(cards));
+    const naturalCount = naturalHands.filter(Boolean).length;
     const dealerNatural = isBlackjack(dealerCards);
-    const winningSideBets = sideBetResult.outcomes.filter((outcome) => outcome.won);
+    const winningSideBets = sideBetResults.flatMap((result, handIndex) =>
+      result.outcomes
+        .filter((outcome) => outcome.won)
+        .map((outcome) => ({
+          ...outcome,
+          name: handCount > 1 ? `Hand ${handIndex + 1} · ${outcome.name}` : outcome.name,
+        })),
+    );
     if (winningSideBets.length) {
       setSideBetCelebration({ id: dealRoundNumber, outcomes: winningSideBets });
     }
-    if (playerNatural || dealerNatural) playCardSound("flip");
-    if (playerNatural && !dealerNatural) {
+    if (dealerNatural || naturalCount === handCount) playCardSound("flip");
+    if (naturalCount > 0 && !dealerNatural) {
       window.setTimeout(() => playCardSound("blackjack"), 180);
     }
     if (winningSideBets.length) {
       window.setTimeout(
         () => playCardSound("sidebet"),
-        playerNatural && !dealerNatural ? 650 : 180,
+        naturalCount > 0 && !dealerNatural ? 650 : 180,
       );
     }
 
     setGame((latest) => {
       if (!latest || latest.phase !== "dealing" || latest.round !== dealRoundNumber) return latest;
 
-      if (playerNatural || dealerNatural) {
-        const payout = playerNatural
-          ? dealerNatural
-            ? bet
-            : bet * 2.5
-          : 0;
+      if (dealerNatural) {
+        const naturalPushPayout = naturalCount * bet;
         return {
           ...latest,
-          bankroll: latest.bankroll + sideBetResult.payout + payout,
+          bankroll: latest.bankroll + sideBetPayout + naturalPushPayout,
           dealer: dealerCards,
           dealerHoleSeen: true,
-          seenCardCounts: latest.dealerHoleSeen
-            ? latest.seenCardCounts
-            : addSeenCards(latest.seenCardCounts, [dealerCards[1]]),
-          hands: [
-            {
-              cards: playerCards,
-              bet,
-              status: playerNatural
-                ? dealerNatural
-                  ? "push"
-                  : "won"
-                : "lost",
-              result: playerNatural
-                ? dealerNatural
-                  ? "PUSH"
-                  : "BLACKJACK"
-                : "DEALER BLACKJACK",
-            },
-          ],
+          seenCardCounts: addSeenCards(latest.seenCardCounts, [dealerCards[1]]),
+          hands: playerCards.map((cards, index) => ({
+            cards,
+            bet,
+            fromSplit: false,
+            status: naturalHands[index] ? ("push" as const) : ("lost" as const),
+            result: naturalHands[index] ? "PUSH" : "DEALER BLACKJACK",
+          })),
           phase: "settled",
-          message: playerNatural
-            ? dealerNatural
-              ? "Two naturals — push"
-              : "Blackjack pays 3 to 2"
+          message: naturalCount === handCount
+            ? "Dealer blackjack — naturals push"
             : "Dealer has blackjack",
-          tone:
-            playerNatural && !dealerNatural
-              ? "win"
-              : dealerNatural && !playerNatural
-                ? "loss"
-                : "neutral",
+          tone: naturalCount === handCount ? "neutral" : "loss",
         };
       }
 
+      const naturalPayout = naturalCount * bet * 2.5;
+      const hands: PlayerHand[] = playerCards.map((cards, index) => ({
+        cards,
+        bet,
+        fromSplit: false,
+        status: naturalHands[index] ? "won" : "active",
+        result: naturalHands[index] ? "BLACKJACK" : undefined,
+      }));
+      const firstActiveHand = hands.findIndex((hand) => hand.status === "active");
+      const roundComplete = firstActiveHand === -1;
       return {
         ...latest,
-        bankroll: latest.bankroll + sideBetResult.payout,
+        bankroll: latest.bankroll + sideBetPayout + naturalPayout,
         dealer: dealerCards,
-        hands: [{ cards: playerCards, bet, status: "active" }],
-        phase: "playing",
-        message: "Your move",
-        tone: "neutral",
+        dealerHoleSeen: roundComplete,
+        seenCardCounts: roundComplete
+          ? addSeenCards(latest.seenCardCounts, [dealerCards[1]])
+          : latest.seenCardCounts,
+        hands,
+        activeHand: roundComplete ? 0 : firstActiveHand,
+        phase: roundComplete ? "settled" : "playing",
+        message: roundComplete
+          ? naturalCount > 1
+            ? `${naturalCount} blackjacks pay 3 to 2`
+            : "Blackjack pays 3 to 2"
+          : naturalCount > 0
+            ? `Blackjack paid — playing hand ${firstActiveHand + 1}`
+            : handCount > 1
+              ? "Playing hand 1"
+              : "Your move",
+        tone: roundComplete ? "win" : "neutral",
       };
     });
   }
@@ -1662,6 +1762,7 @@ export default function BlackjackGame() {
       const splitHands: PlayerHand[] = [firstCards, secondCards].map((cards) => ({
         cards,
         bet: original.bet,
+        fromSplit: true,
         status:
           splitAces || scoreHand(cards).total === 21
             ? ("standing" as const)
@@ -1696,18 +1797,21 @@ export default function BlackjackGame() {
   function surrender() {
     if (surrenderAvailable) playCardSound("flip");
     setGame((current) => {
-      if (!current || current.phase !== "playing" || current.hands.length !== 1) return current;
-      const hand = current.hands[0];
-      if (hand.cards.length !== 2) return current;
-
-      return {
+      if (!current || current.phase !== "playing") return current;
+      const hand = current.hands[current.activeHand];
+      if (!hand || hand.cards.length !== 2 || hand.fromSplit) return current;
+      const hands = current.hands.map((candidate, index) =>
+        index === current.activeHand
+          ? { ...candidate, status: "surrendered" as const, result: "SURRENDER" }
+          : candidate,
+      );
+      return advanceOrSettle({
         ...current,
         bankroll: current.bankroll + Math.floor(hand.bet / 2),
-        hands: [{ ...hand, status: "surrendered", result: "SURRENDER" }],
-        phase: "settled",
-        message: "Late surrender — half your bet is returned",
+        hands,
+        message: "Late surrender — moving to the next hand",
         tone: "neutral",
-      };
+      });
     });
   }
 
@@ -1728,11 +1832,14 @@ export default function BlackjackGame() {
         if (!current || current.phase !== "shuffling" || current.round !== roundState.round) {
           return current;
         }
-        const affordableBet =
-          Math.floor(current.bankroll / selectedTable.minimum) * selectedTable.minimum;
+        const nextHandCount = soloHandCountRef.current;
+        const affordableBet = Math.floor(
+          current.bankroll / nextHandCount / selectedTable.minimum,
+        ) * selectedTable.minimum;
         return {
           ...current,
           currentBet: Math.min(current.currentBet, affordableBet),
+          startingHandCount: nextHandCount,
           sideBets: { ...EMPTY_SIDE_BETS },
           seenCardCounts: emptySeenCardCounts(),
           dealerHoleSeen: false,
@@ -1740,9 +1847,11 @@ export default function BlackjackGame() {
           cutPoint: createCutPoint(),
           phase: "betting",
           message:
-            current.bankroll >= selectedTable.minimum
+            current.bankroll >= selectedTable.minimum * nextHandCount
               ? "Fresh shoe — place your bet"
-              : "You’re below this table’s minimum",
+              : current.bankroll >= selectedTable.minimum
+                ? `Not enough for ${nextHandCount} hands — change settings`
+                : "You’re below this table’s minimum",
           round: current.round + 1,
         };
       });
@@ -1751,26 +1860,31 @@ export default function BlackjackGame() {
 
     setGame((current) => {
       if (!current) return current;
-      const affordableBet =
-        Math.floor(current.bankroll / selectedTable.minimum) * selectedTable.minimum;
+      const nextHandCount = soloHandCountRef.current;
+      const affordableBet = Math.floor(
+        current.bankroll / nextHandCount / selectedTable.minimum,
+      ) * selectedTable.minimum;
       const currentBet = Math.min(current.currentBet, affordableBet);
       const sideBets =
-        currentBet + sideBetStake(current.sideBets) <= current.bankroll
+        totalOpeningStake(currentBet, current.sideBets, nextHandCount) <= current.bankroll
           ? current.sideBets
           : { ...EMPTY_SIDE_BETS };
       return {
         ...current,
         currentBet,
         sideBets,
+        startingHandCount: nextHandCount,
         dealer: [],
         dealerHoleSeen: false,
         hands: [],
         activeHand: 0,
         phase: "betting",
         message:
-          current.bankroll >= selectedTable.minimum
+          current.bankroll >= selectedTable.minimum * nextHandCount
             ? "Place your bet"
-            : "You’re below this table’s minimum",
+            : current.bankroll >= selectedTable.minimum
+              ? `Not enough for ${nextHandCount} hands — change settings`
+              : "You’re below this table’s minimum",
         tone: "neutral",
         round: current.round + 1,
       };
@@ -1798,6 +1912,7 @@ export default function BlackjackGame() {
         cutPoint: needsFreshShoe ? createCutPoint() : current.cutPoint,
         dealer: [],
         hands: [],
+        startingHandCount: soloHandCountRef.current,
         activeHand: 0,
         phase: "betting",
         message: "Bankroll reset — place your bet",
@@ -2018,6 +2133,17 @@ export default function BlackjackGame() {
                 <strong>{tokenAmount(game?.bankroll ?? wallet)}</strong>
               </span>
             </div>
+          ) : null}
+          {!roomSession ? (
+            <button
+              className="iconButton"
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label={`Single-player settings. ${soloHandCount} ${soloHandCount === 1 ? "hand" : "hands"} per deal`}
+              title="Single-player settings"
+            >
+              <SettingsIcon />
+            </button>
           ) : null}
           <button
             className="iconButton"
@@ -2276,12 +2402,16 @@ export default function BlackjackGame() {
               onClick={startSession}
               disabled={!walletLoaded}
             >
-              {wallet < selectedTable.minimum ? "Balance below table minimum" : "Take a seat"} <span>→</span>
+              {wallet < selectedTable.minimum * soloHandCount
+                ? `Need ${tokenAmount(selectedTable.minimum * soloHandCount)} tokens`
+                : `Take a seat · ${soloHandCount} ${soloHandCount === 1 ? "hand" : "hands"}`} <span>→</span>
             </button>
             {homeNotice ? <div className="tableBalanceWarning" role="alert">{homeNotice}</div> : null}
           </div>
 
           <div className="tableFacts">
+            <span><b>{soloHandCount}</b> {soloHandCount === 1 ? "hand" : "hands"}</span>
+            <i />
             <span><b>{DECK_COUNT}</b> deck shoe</span>
             <i />
             <span><b>3:2</b> blackjack</span>
@@ -2445,12 +2575,14 @@ export default function BlackjackGame() {
             ) : (
               <div className="betSpot">
                 <div className="betSpotRing">
-                  <span>Bet</span>
+                  <span>Bet per hand</span>
                   <ChipPile amount={game.currentBet} denominations={selectedTable.chips} />
                   <strong>{tokenAmount(game.currentBet)}</strong>
-                  <small>tokens</small>
+                  <small>
+                    {game.startingHandCount} {game.startingHandCount === 1 ? "hand" : "hands"} · {tokenAmount(totalOpeningStake(game.currentBet, game.sideBets, game.startingHandCount))} total
+                  </small>
                 </div>
-                <div className="sideBetRow" aria-label="Side bets">
+                <div className="sideBetRow" aria-label="Side bets per hand">
                   {(Object.keys(SIDE_BET_LABELS) as SideBetKey[]).map((key) => (
                     <button
                       className={game.sideBets[key] ? "selected" : ""}
@@ -2478,7 +2610,11 @@ export default function BlackjackGame() {
                       key={value}
                       className={`betChip ${chipValueClass(value)}`}
                       onClick={() => changeBet(value)}
-                      disabled={game.currentBet + sideBetStake(game.sideBets) + value > game.bankroll}
+                      disabled={totalOpeningStake(
+                        game.currentBet + value,
+                        game.sideBets,
+                        game.startingHandCount,
+                      ) > game.bankroll}
                       aria-label={`Add ${value} tokens`}
                     >
                       <i /><strong>{value}</strong>
@@ -2498,10 +2634,15 @@ export default function BlackjackGame() {
                   type="button"
                   onClick={tableBusted ? resetTableBankroll : dealRound}
                   disabled={
-                    !tableBusted && game.currentBet < selectedTable.minimum
+                    !tableBusted && (
+                      game.currentBet < selectedTable.minimum ||
+                      totalOpeningStake(game.currentBet, game.sideBets, game.startingHandCount) > game.bankroll
+                    )
                   }
                 >
-                  {tableBusted ? "Reset" : <>Deal cards<span>→</span></>}
+                  {tableBusted
+                    ? "Reset"
+                    : <>Deal {game.startingHandCount === 1 ? "cards" : `${game.startingHandCount} hands`}<span>→</span></>}
                 </button>
               </div>
             ) : game.phase === "playing" ? (
@@ -2566,6 +2707,50 @@ export default function BlackjackGame() {
           </div>
         </section>
       )}
+
+      {settingsOpen && !roomSession ? (
+        <div className="modalBackdrop" role="presentation" onMouseDown={() => setSettingsOpen(false)}>
+          <section
+            className="settingsSheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button className="closeButton" type="button" onClick={() => setSettingsOpen(false)} aria-label="Close settings">×</button>
+            <span className="sheetEyebrow">Single-player settings</span>
+            <h2 id="settings-title">Hands per deal</h2>
+            <p>Choose up to three starting hands. You place the same main bet and side bets on each hand.</p>
+            <div className="handCountOptions" role="group" aria-label="Number of hands per deal">
+              {([1, 2, 3] as const).map((handCount) => (
+                <button
+                  className={soloHandCount === handCount ? "selected" : ""}
+                  type="button"
+                  key={handCount}
+                  aria-pressed={soloHandCount === handCount}
+                  onClick={() => selectSoloHandCount(handCount)}
+                >
+                  <span aria-hidden="true">
+                    {Array.from({ length: handCount }, (_, index) => <i key={index} />)}
+                  </span>
+                  <strong>{handCount}</strong>
+                  <small>{handCount === 1 ? "hand" : "hands"}</small>
+                </button>
+              ))}
+            </div>
+            <div className={`handCountStatus ${handCountQueued ? "queued" : ""}`}>
+              <strong>{soloHandCount} {soloHandCount === 1 ? "hand" : "hands"} selected</strong>
+              <span>
+                {handCountQueued
+                  ? "Queued for the next deal. Your current round will not change."
+                  : game?.phase === "betting"
+                    ? "This applies to the upcoming deal."
+                    : "This setting is saved on this device."}
+              </span>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {roomMode ? (
         <div className="modalBackdrop" role="presentation" onMouseDown={() => setRoomMode(null)}>
@@ -2642,7 +2827,7 @@ export default function BlackjackGame() {
             <dl>
               <div><dt>Blackjack</dt><dd>Pays 3:2</dd></div>
               <div><dt>Dealer</dt><dd>Stands on all 17s</dd></div>
-              <div><dt>Shoe</dt><dd>{DECK_COUNT} decks; cut card 55–75% through</dd></div>
+              <div><dt>Shoe</dt><dd>{DECK_COUNT} decks; cut card 55–90% through</dd></div>
               <div><dt>Double</dt><dd>Any first two cards</dd></div>
               <div><dt>Split</dt><dd>Equal values; all 10-value cards match</dd></div>
               <div><dt>Surrender</dt><dd>Late; half the main bet returned</dd></div>
