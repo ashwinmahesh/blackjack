@@ -132,7 +132,8 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .welcomeEyebrow span { width: 22px; height: 1px; background: var(--gold); }
 .welcomeMark { color: rgba(212,174,98,.72); margin: 13px 0 5px; font-size: 21px; text-shadow: 0 0 22px rgba(212,174,98,.36); }
 .welcomeScreen h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(42px, 7vw, 74px); line-height: .98; font-weight: 400; letter-spacing: -.045em; }
-.welcomeCopy { max-width: 490px; margin: 16px auto 27px; color: #aab8af; font-size: 14px; line-height: 1.7; text-align: center; }
+.welcomeTagline { margin: 13px auto 0; color: #e4d5b4; font-family: Georgia, "Times New Roman", serif; font-size: clamp(16px, 2vw, 20px); line-height: 1.35; text-align: center; }
+.welcomeCopy { max-width: 490px; margin: 8px auto 27px; color: #aab8af; font-size: 14px; line-height: 1.7; text-align: center; }
 
 .buyInCard { width: min(1000px, 100%); border: 1px solid rgba(212,174,98,.18); background: linear-gradient(145deg, rgba(15,49,37,.94), rgba(7,28,21,.95)); border-radius: 19px; padding: 20px; box-shadow: 0 28px 80px rgba(0,0,0,.32), inset 0 1px rgba(255,255,255,.04); }
 .buyInHeading { display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px 15px; }
@@ -519,6 +520,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .tableBustCopy > b { font-size: 9px; }
   .welcomeScreen { min-height: calc(100dvh - 62px); justify-content: flex-start; padding-top: max(40px, 7vh); }
   .welcomeScreen h1 { font-size: 45px; }
+  .welcomeTagline { font-size: 16px; }
   .welcomeCopy { font-size: 12px; max-width: 360px; margin-bottom: 22px; }
   .buyInCard { padding: 15px; }
   .stakeTableOptions { grid-template-columns: repeat(4, minmax(210px, 1fr)); gap: 7px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }

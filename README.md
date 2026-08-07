@@ -1,4 +1,4 @@
-# Dealer's Edge
+# Ashwin's Blackjack
 
 A mobile-first, six-deck blackjack game built with Next.js. The app uses practice tokens only and supports persistent device-local balances, four table-stakes tiers, hit, stand, double, up to five split hands per round (including mixed 10/J/Q/K pairs), late surrender, and Perfect Pairs, 21+3, and Match the Dealer side bets.
 

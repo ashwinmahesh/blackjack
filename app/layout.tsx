@@ -5,8 +5,9 @@ import "./globals.css";
 const GOOGLE_ANALYTICS_ID = "G-RMTSSXD4LY";
 
 export const metadata: Metadata = {
-  title: "Dealer's Edge — Blackjack",
-  description: "A polished six-deck blackjack table built for every screen.",
+  title: "Ashwin's Blackjack",
+  applicationName: "Ashwin's Blackjack",
+  description: "Ad-free six-deck blackjack, built for every screen. Play without distractions.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

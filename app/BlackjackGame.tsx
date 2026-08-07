@@ -1980,11 +1980,11 @@ export default function BlackjackGame() {
             if (roomSession) setRoomSession(null);
             else if (game) setGame(null);
           }}
-          aria-label={game || roomSession ? "Leave table" : "Dealer's Edge home"}
+          aria-label={game || roomSession ? "Leave table" : "Ashwin's Blackjack home"}
         >
           <span className="brandMark"><span>◆</span></span>
           <span className="brandWords">
-            <strong>Dealer’s Edge</strong>
+            <strong>Ashwin’s</strong>
             <small>Blackjack</small>
           </span>
         </button>
@@ -2202,6 +2202,7 @@ export default function BlackjackGame() {
           <div className="welcomeEyebrow"><span /> Private {DECK_COUNT}-deck table</div>
           <div className="welcomeMark" aria-hidden="true">♠</div>
           <h1>Play your hand.</h1>
+          <p className="welcomeTagline">Ad-free blackjack. Play without distractions</p>
           <p className="welcomeCopy">
             Your token balance stays on this device. Choose a table, then take a seat.
           </p>
