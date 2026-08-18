@@ -642,6 +642,7 @@ export default function BlackjackGame() {
   const [game, setGame] = useState<GameState | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [resetTokensOpen, setResetTokensOpen] = useState(false);
   const [soloHandCount, setSoloHandCount] = useState<SoloHandCount>(1);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [roomMode, setRoomMode] = useState<"create" | "join" | null>(null);
@@ -1922,6 +1923,12 @@ export default function BlackjackGame() {
     });
   }
 
+  function confirmTokenReset() {
+    playCardSound("click");
+    resetTableBankroll();
+    setResetTokensOpen(false);
+  }
+
   function openRoom(mode: "create" | "join") {
     setRoomMode(mode);
     setRoomError("");
@@ -2126,13 +2133,19 @@ export default function BlackjackGame() {
 
         <div className="topActions">
           {game || (!roomSession && walletLoaded) ? (
-            <div className="balancePill">
+            <button
+              className="balancePill"
+              type="button"
+              onClick={() => setResetTokensOpen(true)}
+              aria-label={`Token balance: ${tokenAmount(game?.bankroll ?? wallet)}. Reset tokens`}
+              title="Reset tokens"
+            >
               <span className="miniChip">◎</span>
               <span>
                 <small>Balance</small>
                 <strong>{tokenAmount(game?.bankroll ?? wallet)}</strong>
               </span>
-            </div>
+            </button>
           ) : null}
           {!roomSession ? (
             <button
@@ -2747,6 +2760,35 @@ export default function BlackjackGame() {
                     ? "This applies to the upcoming deal."
                     : "This setting is saved on this device."}
               </span>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {resetTokensOpen ? (
+        <div className="modalBackdrop" role="presentation" onMouseDown={() => setResetTokensOpen(false)}>
+          <section
+            className="resetTokensDialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reset-tokens-title"
+            aria-describedby="reset-tokens-description"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <span className="resetTokensIcon" aria-hidden="true">◎</span>
+            <span className="sheetEyebrow">Token balance</span>
+            <h2 id="reset-tokens-title">Reset your tokens?</h2>
+            <p id="reset-tokens-description">
+              Your balance will return to {tokenAmount(RESET_BALANCE)} tokens
+              {game ? " and your current solo hand will end." : "."}
+            </p>
+            <div className="resetTokensActions">
+              <button type="button" className="cancelResetButton" onClick={() => setResetTokensOpen(false)} autoFocus>
+                Cancel
+              </button>
+              <button type="button" className="confirmResetButton" onClick={confirmTokenReset}>
+                Reset tokens
+              </button>
             </div>
           </section>
         </div>
