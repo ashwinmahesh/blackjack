@@ -208,15 +208,15 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .multiplayerStatus small { display: block; margin-top: 6px; color: #71857a; }
 .multiplayerStatus .roomErrorText { color: #ee9f96; }
 
-.roomGameScreen { min-height: calc(100dvh - 74px); padding: 17px clamp(12px, 3vw, 42px) 18px; display: grid; grid-template-rows: auto minmax(150px, .8fr) auto minmax(230px, 1.2fr) auto; gap: 8px; overflow: hidden; background: radial-gradient(ellipse at 50% 40%, rgba(38,121,87,.3), transparent 50%), #092b21; }
+.roomGameScreen { min-height: calc(100dvh - 74px); padding: 17px clamp(12px, 3vw, 42px) 18px; display: grid; grid-template-rows: auto minmax(126px, .55fr) auto minmax(270px, 1.45fr) auto; gap: 8px; overflow: hidden; background: radial-gradient(ellipse at 50% 40%, rgba(38,121,87,.3), transparent 50%), #092b21; }
 .roomGameTopline { display: flex; align-items: center; justify-content: space-between; color: #91a69a; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; }
 .roomGameTopline strong { color: #d3ddd7; }
 .roomDealerArea { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 0; }
 .roomGameMessage { justify-self: center; padding: 8px 21px; border: 1px solid rgba(255,255,255,.1); border-radius: 22px; background: rgba(4,18,14,.74); color: #fffdf8; font: 18px Georgia, serif; }
-.roomPlayersStage { width: min(1180px, 100%); min-height: 230px; justify-self: center; display: grid; grid-template-columns: minmax(125px, 210px) minmax(300px, 620px) minmax(125px, 210px); align-items: end; justify-content: center; gap: clamp(8px, 2vw, 24px); padding: 12px 0 3px; }
+.roomPlayersStage { width: min(1180px, 100%); min-height: 270px; justify-self: center; display: grid; grid-template-columns: minmax(125px, 210px) minmax(330px, 680px) minmax(125px, 210px); align-items: start; justify-content: center; gap: clamp(8px, 2vw, 24px); padding: 2px 0 3px; }
 .roomOpponentColumn { height: 100%; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; }
 .roomPlayerSeat { min-width: 0; position: relative; border: 1px solid rgba(255,255,255,.09); background: rgba(4,20,15,.54); transition: border-color .2s ease, box-shadow .2s ease, opacity .2s ease, transform .2s ease; }
-.roomLocalPlayer { width: 100%; min-height: 222px; padding: 18px clamp(16px, 3vw, 34px) 13px; align-self: end; border-color: rgba(212,174,98,.2); border-radius: 44% 44% 18px 18px / 25% 25% 18px 18px; background: radial-gradient(ellipse at 50% 72%, rgba(212,174,98,.11), transparent 55%), rgba(4,20,15,.38); box-shadow: inset 0 1px rgba(255,255,255,.04), 0 18px 45px rgba(0,0,0,.18); }
+.roomLocalPlayer { width: 100%; min-height: 252px; padding: 18px clamp(16px, 3vw, 34px) 13px; align-self: start; border-color: rgba(212,174,98,.2); border-radius: 44% 44% 18px 18px / 25% 25% 18px 18px; background: radial-gradient(ellipse at 50% 72%, rgba(212,174,98,.11), transparent 55%), rgba(4,20,15,.38); box-shadow: inset 0 1px rgba(255,255,255,.04), 0 18px 45px rgba(0,0,0,.18); }
 .roomOpponentPlayer { width: 100%; min-height: 102px; padding: 9px; border-radius: 12px; opacity: .72; transform: scale(.96); transform-origin: bottom center; }
 .roomPlayerSeat.activeTurn { border-color: rgba(239,203,126,.9); box-shadow: 0 0 0 2px rgba(212,174,98,.12), 0 0 30px rgba(212,174,98,.17); }
 .roomOpponentPlayer.activeTurn { opacity: 1; transform: translateY(-3px) scale(1); }
@@ -243,15 +243,15 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomLocalHands[data-hand-count="4"] .roomHand:nth-child(4) { grid-column: 3 / span 2; }
 .roomLocalHands[data-hand-count="5"] .roomHand:nth-child(4) { grid-column: 2 / span 2; }
 .roomLocalHands[data-hand-count="5"] .roomHand:nth-child(5) { grid-column: 4 / span 2; }
-.roomLocalHands[data-hand-count="2"] .playingCard { width: clamp(82px, 8vw, 102px); }
-.roomLocalHands[data-hand-count="3"] .playingCard { width: clamp(68px, 6.5vw, 86px); }
-.roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .playingCard { width: clamp(54px, 5vw, 68px); }
+.roomLocalHands[data-hand-count="2"] .playingCard { width: clamp(92px, 9vw, 116px); }
+.roomLocalHands[data-hand-count="3"] .playingCard { width: clamp(76px, 7.2vw, 98px); }
+.roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .playingCard { width: clamp(60px, 5.6vw, 78px); }
 .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .roomLocalCardFan { min-height: 83px; }
 .roomHand { display: flex; flex-direction: column; align-items: center; position: relative; }
 .roomHand.activeRoomHand::before { content: ""; position: absolute; inset: 3px -8px -9px; z-index: -1; border: 2px solid rgba(255,216,126,.88); border-radius: 13px; background: rgba(240,193,99,.055); box-shadow: 0 0 0 2px rgba(240,193,99,.12), 0 0 22px rgba(240,193,99,.25); }
 .roomHand.activeRoomHand::after { content: ""; position: absolute; left: 8%; right: 8%; bottom: -7px; height: 4px; border-radius: 3px; background: #ffda83; box-shadow: 0 0 13px rgba(255,218,131,.95); }
-.roomLocalCardFan { min-height: 130px; display: flex; align-items: center; padding-left: 18px; }
-.roomLocalCardFan .playingCard { width: clamp(78px, 7vw, 96px); margin-left: -18px; border-radius: 8px; }
+.roomLocalCardFan { min-height: 156px; display: flex; align-items: center; padding-left: 22px; }
+.roomLocalCardFan .playingCard { width: clamp(94px, 8.5vw, 118px); margin-left: -22px; border-radius: 8px; }
 .miniCardFan { min-height: 68px; display: flex; align-items: center; padding-left: 9px; }
 .miniCardFan .playingCard { width: 44px; margin-left: -9px; border-radius: 4px; }
 .miniCardFan .cardCorner { top: 4px; left: 5px; }
@@ -260,7 +260,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .miniCardFan .bottomCorner { left: auto; right: 5px; top: auto; bottom: 4px; }
 .miniCardFan .cardSuit { font-size: 18px; }
 .roomHand small { color: #aab8b0; font-size: 8px; white-space: nowrap; }
-.roomLocalPlayer .roomHand small { margin-top: 2px; font-size: 11px; }
+.roomLocalPlayer .roomHand small { margin-top: 4px; color: #f0ddaf; font-size: 15px; font-weight: 800; }
 .roomHand > b { position: absolute; top: 42px; padding: 4px 6px; border: 1px solid var(--gold); border-radius: 4px; background: #0b211a; color: var(--gold-bright); font-size: 8px; letter-spacing: .08em; }
 .roomLocalPlayer .roomHand > b { top: 67px; padding: 6px 9px; font-size: 10px; }
 .roomHand > b.bust { border-color: #e06c60; color: #ffbbb2; }
@@ -358,6 +358,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .playingCard.cardMotionDealer { animation-name: dealToDealer; }
 .playingCard.cardMotionPlayer { animation-name: dealToPlayer; }
 .playingCard.cardReveal { transform-origin: 50% 50%; animation: flipReveal .56s cubic-bezier(.3,.7,.2,1) both; }
+.playingCard.cardNoMotion { animation: none; will-change: auto; }
 .splitHands .playerHand:nth-child(2) .playingCard:last-child { animation-delay: .14s; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(-18px) rotate(-2deg); } to { opacity: 1; transform: none; } }
 @keyframes dealToDealer { from { opacity: .25; transform: translate(150px, -70px) rotate(10deg) scale(.92); } to { opacity: 1; transform: none; } }
@@ -593,11 +594,11 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .multiplayerStatus { line-height: 1.5; }
   .roomSheet { padding: 28px 21px; }
 
-  .roomGameScreen { min-height: calc(100dvh - 62px); grid-template-rows: 28px 125px auto minmax(230px, 1fr) auto; padding: 10px 8px max(8px, env(safe-area-inset-bottom)); }
+  .roomGameScreen { min-height: calc(100dvh - 62px); grid-template-rows: 28px 108px auto minmax(250px, 1fr) auto; padding: 10px 8px max(8px, env(safe-area-inset-bottom)); }
   .roomGameTopline { font-size: 9px; }
   .roomGameTopline strong { max-width: 160px; text-align: center; }
   .roomGameMessage { font-size: 15px; text-align: center; }
-  .roomPlayersStage { min-height: 230px; grid-template-columns: minmax(62px, .62fr) minmax(190px, 2fr) minmax(62px, .62fr); gap: 4px; padding-top: 13px; }
+  .roomPlayersStage { min-height: 250px; grid-template-columns: minmax(58px, .56fr) minmax(210px, 2.2fr) minmax(58px, .56fr); gap: 4px; padding-top: 4px; }
   .roomOpponentColumn { gap: 5px; }
   .roomOpponentPlayer { min-height: 87px; padding: 7px 3px 5px; border-radius: 9px; }
   .roomOpponentPlayer .roomPlayerSeatHeader { flex-direction: column; gap: 2px; text-align: center; }
@@ -617,7 +618,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .roomOpponentPlayer .roomHand small { max-width: 60px; overflow: hidden; text-overflow: ellipsis; font-size: 6px; }
   .roomOpponentPlayer .roomHand > b { top: 25px; padding: 2px 3px; font-size: 5px; }
   .roomOpponentPlayer .roomWaiting { min-height: 45px; padding: 2px; font-size: 7px; }
-  .roomLocalPlayer { min-height: 220px; padding: 17px 5px 8px; border-radius: 43% 43% 13px 13px / 20% 20% 13px 13px; }
+  .roomLocalPlayer { min-height: 238px; padding: 17px 5px 8px; border-radius: 43% 43% 13px 13px / 20% 20% 13px 13px; }
   .roomLocalPlayer .roomPlayerSeatHeader { padding: 0 7px; }
   .roomLocalPlayer .roomPlayerIdentity { gap: 5px; }
   .roomLocalPlayer .roomPlayerAvatar { width: 28px; height: 28px; flex-basis: 28px; font-size: 13px; }
@@ -625,16 +626,16 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .roomLocalPlayer .roomPlayerIdentity small { font-size: 7px; }
   .roomLocalPlayer .roomPlayerBalance { font-size: 9px; }
   .roomLocalHands { column-gap: 4px; row-gap: 18px; margin-top: 8px; }
-  .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .playingCard { width: clamp(46px, 13vw, 56px); }
+  .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .playingCard { width: clamp(50px, 14vw, 61px); }
   .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .roomLocalCardFan { min-height: 75px; }
   .roomLocalHands[data-hand-count="3"] .roomLocalCardFan { padding-left: 42px; }
   .roomLocalHands[data-hand-count="3"] .roomLocalCardFan .playingCard { margin-left: -42px; }
   .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .roomLocalCardFan { padding-left: 38px; }
   .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .roomLocalCardFan .playingCard { margin-left: -38px; }
-  .roomLocalCardFan { min-height: 111px; padding-left: 13px; }
-  .roomLocalCardFan .playingCard { width: clamp(62px, 17vw, 74px); margin-left: -13px; }
-  .roomLocalPlayer .roomHand small { font-size: 9px; }
-  .roomLocalPlayer .roomHand > b { top: 56px; font-size: 8px; }
+  .roomLocalCardFan { min-height: 128px; padding-left: 15px; }
+  .roomLocalCardFan .playingCard { width: clamp(74px, 20vw, 88px); margin-left: -15px; }
+  .roomLocalPlayer .roomHand small { font-size: 12px; }
+  .roomLocalPlayer .roomHand > b { top: 66px; font-size: 8px; }
   .roomTurnBadge { top: -9px; padding: 4px 6px; font-size: 6px; }
   .roomGameControls { flex-wrap: wrap; min-height: 82px; }
   .roomWagerPicker { width: 100%; justify-content: center; overflow-x: auto; }

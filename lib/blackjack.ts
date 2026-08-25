@@ -312,7 +312,8 @@ export function scoreMatchDealer(
 }
 
 export function dealerShouldHit(cards: Card[]): boolean {
-  return scoreHand(cards).total < 17;
+  const score = scoreHand(cards);
+  return score.total < 17 || (score.total === 17 && score.isSoft);
 }
 
 export function playDealer(

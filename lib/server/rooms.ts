@@ -183,6 +183,10 @@ function activeHands(player: StoredPlayer) {
   return player.hands.filter((hand) => hand.status === "active");
 }
 
+function playablePlayers(room: StoredRoom) {
+  return room.players.filter((player) => player.bankroll >= room.table.minimum);
+}
+
 function settleRoom(room: StoredRoom) {
   const hasLiveHand = room.players.some((player) =>
     player.hands.some(
@@ -309,11 +313,7 @@ export function createRoom(input: {
 
   let code = roomCode();
   while (rooms.has(code)) code = roomCode();
-  const requestedBankroll = Math.floor(input.startingBankroll ?? 500);
-  const bankroll =
-    Number.isFinite(requestedBankroll) && requestedBankroll > 0 && requestedBankroll <= 10_000_000
-      ? requestedBankroll
-      : 500;
+  const bankroll = 500;
   const selectedTable = ROOM_TABLES[0];
   const hostToken = playerToken();
   const host: StoredPlayer = {
@@ -363,7 +363,7 @@ export function joinRoom(input: { code: string; name: string; passcode: string }
     id: randomBytes(6).toString("base64url"),
     sessionHash: hashPlayerToken(playerTokenValue),
     name,
-    bankroll: room.players[0]?.bankroll ?? 500,
+    bankroll: 500,
     bet: 0,
     ready: false,
     joinedAt: Date.now(),
@@ -415,11 +415,14 @@ export function roomAction(
       room.shoe = createShoe(DECK_COUNT);
       room.cutPoint = createCutPoint();
     }
+    const playableCount = playablePlayers(room).length;
     room.dealer = [];
     room.currentPlayerId = null;
     room.phase = "betting";
     room.round += 1;
-    room.message = `Place bets — minimum ${room.table.minimum}`;
+    room.message = playableCount
+      ? `Place bets — minimum ${room.table.minimum}`
+      : "No players have enough tokens for the next round";
     for (const candidate of room.players) {
       candidate.bet = 0;
       candidate.hands = [];
@@ -430,6 +433,9 @@ export function roomAction(
 
   if (action === "bet") {
     if (room.phase !== "betting") throw new RoomError("The table is not taking bets", 409);
+    if (player.bankroll < room.table.minimum) {
+      throw new RoomError("You do not have enough tokens for this table", 409);
+    }
     const wager = Math.floor(amount ?? 0);
     if (wager < room.table.minimum) throw new RoomError(`Minimum bet is ${room.table.minimum}`, 400);
     if (wager > player.bankroll) throw new RoomError("Not enough tokens", 409);
@@ -437,7 +443,7 @@ export function roomAction(
     player.bet = wager;
     player.bankroll -= wager;
     room.message = `${player.name} is in for ${wager}`;
-    if (room.players.every((candidate) => candidate.bet > 0)) dealRoomRound(room);
+    if (playablePlayers(room).every((candidate) => candidate.bet > 0)) dealRoomRound(room);
     return touch(room);
   }
 

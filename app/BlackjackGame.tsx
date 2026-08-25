@@ -104,6 +104,7 @@ type RoomSession = {
   code: string;
   playerId: string;
   seatId: string;
+  passcode: string;
   room: RoomView;
 };
 
@@ -337,6 +338,7 @@ function PlayingCard({
   revealed = false,
   motion,
   delayMs = 0,
+  animated = true,
   onInteract,
 }: {
   card?: CardType;
@@ -344,6 +346,7 @@ function PlayingCard({
   revealed?: boolean;
   motion?: "dealer" | "player";
   delayMs?: number;
+  animated?: boolean;
   onInteract?: () => void;
 }) {
   const motionClass = motion === "dealer"
@@ -393,7 +396,7 @@ function PlayingCard({
   if (hidden || !card) {
     return (
       <div
-        className={`playingCard cardBack ${motionClass}`}
+        className={`playingCard cardBack ${motionClass} ${animated ? "" : "cardNoMotion"}`}
         style={motionStyle}
         aria-label="Face-down card"
         {...interactionProps}
@@ -409,7 +412,7 @@ function PlayingCard({
   const mark = SUIT_MARKS[card.suit];
   return (
     <div
-      className={`playingCard cardFace ${isRed ? "redCard" : "blackCard"} ${motionClass} ${revealed ? "cardReveal" : ""}`}
+      className={`playingCard cardFace ${isRed ? "redCard" : "blackCard"} ${motionClass} ${revealed ? "cardReveal" : ""} ${animated ? "" : "cardNoMotion"}`}
       style={motionStyle}
       aria-label={`${card.rank} of ${card.suit}`}
       {...interactionProps}
@@ -427,17 +430,33 @@ function PlayingCard({
   );
 }
 
+function roomHandTotalLabel(cards: CardType[]) {
+  const score = scoreHand(cards);
+  const hasAce = cards.some((card) => card.rank === "A");
+  if (!hasAce) return String(score.total);
+  return `${score.isSoft ? "Soft" : "Hard"} ${score.total}`;
+}
+
+function roomDealerTotalLabel(cards: Array<CardType | null>) {
+  const visibleCards = cards.filter((card): card is CardType => Boolean(card));
+  if (!visibleCards.length) return null;
+  return roomHandTotalLabel(visibleCards);
+}
+
 function RoomPlayerSeat({
   player,
   isLocal,
   isActive,
+  tableMinimum,
   onCardInteract,
 }: {
   player: RoomPlayerView;
   isLocal: boolean;
   isActive: boolean;
+  tableMinimum: number;
   onCardInteract: () => void;
 }) {
+  const canPlayNextRound = player.bankroll >= tableMinimum;
   return (
     <article
       className={`roomPlayerSeat ${isLocal ? "roomLocalPlayer" : "roomOpponentPlayer"} ${isActive ? "activeTurn" : ""}`}
@@ -471,21 +490,28 @@ function RoomPlayerSeat({
               <div className={isLocal ? "roomLocalCardFan" : "miniCardFan"}>
                 {hand.cards.map((card, cardIndex) => (
                   <PlayingCard
+                    animated={isLocal}
                     card={card}
-                    delayMs={cardIndex * 110 + handIndex * 45}
+                    delayMs={isLocal ? cardIndex * DEAL_DELAY + handIndex * 80 : 0}
                     key={card.id}
-                    motion="player"
+                    motion={isLocal ? "player" : undefined}
                     onInteract={onCardInteract}
                   />
                 ))}
               </div>
-              <small>{scoreHand(hand.cards).total} · bet {tokenAmount(hand.bet)}</small>
+              <small>{roomHandTotalLabel(hand.cards)} · bet {tokenAmount(hand.bet)}</small>
               {hand.result ? <b className={hand.result === "BUST" ? "bust" : ""}>{hand.result}</b> : null}
             </div>
           ))}
         </div>
       ) : (
-        <div className="roomWaiting">{player.bet ? `Bet ${tokenAmount(player.bet)}` : "Waiting for bet"}</div>
+        <div className="roomWaiting">
+          {player.bet
+            ? `Bet ${tokenAmount(player.bet)}`
+            : canPlayNextRound
+              ? "Waiting for bet"
+              : "Out of tokens"}
+        </div>
       )}
     </article>
   );
@@ -624,7 +650,7 @@ function StrategyAdvisor({
                   If {advice.move.toLowerCase()} is unavailable: {advice.fallback}
                 </span>
               ) : null}
-              <footer>6 decks · S17 · DAS · late surrender · no card count</footer>
+              <footer>6 decks · H17 · DAS · late surrender · no card count</footer>
             </>
           ) : (
             <p className="strategyWaiting">Deal a hand to see the recommended move.</p>
@@ -654,6 +680,7 @@ export default function BlackjackGame() {
   const [roomSession, setRoomSession] = useState<RoomSession | null>(null);
   const [homeNotice, setHomeNotice] = useState("");
   const [roomWager, setRoomWager] = useState(10);
+  const [roomLinkCopied, setRoomLinkCopied] = useState(false);
   const [cardCountOpen, setCardCountOpen] = useState(false);
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [unlockedAchievements, setUnlockedAchievements] = useState<number[]>([]);
@@ -688,6 +715,16 @@ export default function BlackjackGame() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      const joinParams = new URLSearchParams(window.location.search);
+      const inviteCode = joinParams.get("room")?.trim().toUpperCase() ?? "";
+      const invitePasscode = joinParams.get("passcode") ?? "";
+      if (inviteCode && invitePasscode) {
+        setRoomMode("join");
+        setRoomName((name) => name || "Player");
+        setRoomCode(inviteCode.slice(0, 5));
+        setRoomPasscode(invitePasscode.slice(0, 32));
+      }
+
       const cachedBalance = Number(window.localStorage.getItem(WALLET_KEY));
       const startingBalance =
         Number.isFinite(cachedBalance) && cachedBalance >= LOWEST_TABLE_MINIMUM
@@ -1113,7 +1150,7 @@ export default function BlackjackGame() {
       nextRoom.dealer[1],
     );
     const shuffled = nextRoom.shoeRemaining > previousRoom.shoeRemaining;
-    const soundSpacing = 115;
+    const soundSpacing = DEAL_DELAY;
     const dealSoundStart = holeRevealed ? 160 : 0;
 
     if (shuffled) playCardSound("shuffle");
@@ -1306,6 +1343,9 @@ export default function BlackjackGame() {
   const isRoomHost = Boolean(roomSession && roomSession.room.hostId === roomSession.seatId);
   const isRoomTurn = Boolean(
     roomSession && roomSession.room.currentPlayerId === roomSession.seatId,
+  );
+  const roomPlayerCanBet = Boolean(
+    roomSession && roomPlayer && roomPlayer.bankroll >= roomSession.room.table.minimum,
   );
   const achievementBalance = roomPlayer?.bankroll ?? game?.bankroll ?? wallet;
   const achievementSource = roomPlayer
@@ -1936,6 +1976,18 @@ export default function BlackjackGame() {
     setRoomPasscode("");
   }
 
+  const roomInviteLink = roomSession && typeof window !== "undefined"
+    ? `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(roomSession.code)}&passcode=${encodeURIComponent(roomSession.passcode)}`
+    : "";
+
+  function copyRoomInviteLink() {
+    if (!roomInviteLink) return;
+    playCardSound("click");
+    setRoomLinkCopied(true);
+    void navigator.clipboard?.writeText(roomInviteLink);
+    window.setTimeout(() => setRoomLinkCopied(false), 1800);
+  }
+
   async function submitRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!roomMode || roomBusy) return;
@@ -1954,7 +2006,6 @@ export default function BlackjackGame() {
         body: JSON.stringify({
           name: roomName,
           passcode: roomPasscode,
-          ...(roomMode === "create" ? { startingBankroll: wallet } : {}),
         }),
       });
       const data = (await response.json()) as {
@@ -1973,11 +2024,12 @@ export default function BlackjackGame() {
         code: data.room.code,
         playerId: data.playerId,
         seatId: data.seatId,
+        passcode: roomPasscode,
         room: data.room,
       });
       setRoomWager(data.room.table.minimum);
       setRoomMode(null);
-      setRoomPasscode("");
+      if (roomMode === "join") setRoomPasscode("");
     } catch (error) {
       setRoomError(error instanceof Error ? error.message : "Could not open the room");
     } finally {
@@ -2132,18 +2184,20 @@ export default function BlackjackGame() {
         </button>
 
         <div className="topActions">
-          {game || (!roomSession && walletLoaded) ? (
+          {game || roomPlayer || (!roomSession && walletLoaded) ? (
             <button
               className="balancePill"
               type="button"
-              onClick={() => setResetTokensOpen(true)}
-              aria-label={`Token balance: ${tokenAmount(game?.bankroll ?? wallet)}. Reset tokens`}
-              title="Reset tokens"
+              onClick={() => {
+                if (!roomSession) setResetTokensOpen(true);
+              }}
+              aria-label={`Token balance: ${tokenAmount(roomPlayer?.bankroll ?? game?.bankroll ?? wallet)}${roomSession ? "" : ". Reset tokens"}`}
+              title={roomSession ? "Token balance" : "Reset tokens"}
             >
               <span className="miniChip">◎</span>
               <span>
                 <small>Balance</small>
-                <strong>{tokenAmount(game?.bankroll ?? wallet)}</strong>
+                <strong>{tokenAmount(roomPlayer?.bankroll ?? game?.bankroll ?? wallet)}</strong>
               </span>
             </button>
           ) : null}
@@ -2178,17 +2232,17 @@ export default function BlackjackGame() {
           <div className="roomLobbyCard">
             <div className="welcomeEyebrow"><span /> Live private room</div>
             <h1>Table {roomSession.code}</h1>
-            <p>Share this code and the passcode with up to four friends.</p>
+            <p>Share this invite link with up to four friends.</p>
 
             <button
               className="roomCodeDisplay"
               type="button"
-              onClick={() => void navigator.clipboard?.writeText(roomSession.code)}
-              title="Copy room code"
+              onClick={copyRoomInviteLink}
+              title="Copy invite link"
             >
-              <small>Room code</small>
+              <small>Invite link</small>
               <strong>{roomSession.code}</strong>
-              <span>Copy</span>
+              <span>{roomLinkCopied ? "Copied" : "Copy link"}</span>
             </button>
 
             <div className="seatGrid">
@@ -2256,12 +2310,17 @@ export default function BlackjackGame() {
           </div>
 
           <div className="roomDealerArea">
-            <div className="zoneLabel"><span>Dealer</span></div>
+            <div className="zoneLabel">
+              <span>Dealer</span>
+              {roomDealerTotalLabel(roomSession.room.dealer) ? (
+                <span className="handValue">{roomDealerTotalLabel(roomSession.room.dealer)}</span>
+              ) : null}
+            </div>
             <div className="cardFan dealerCards">
               {roomSession.room.dealer.length ? roomSession.room.dealer.map((card, index) => (
                 <PlayingCard
                   card={card ?? undefined}
-                  delayMs={roomSession.room.phase === "settled" ? Math.max(0, index - 1) * 140 : index * 115}
+                  delayMs={roomSession.room.phase === "settled" ? Math.max(0, index - 1) * DEAL_DELAY : index * DEAL_DELAY}
                   hidden={!card}
                   key={card?.id ?? `hole-${index}`}
                   motion="dealer"
@@ -2283,6 +2342,7 @@ export default function BlackjackGame() {
                   key={player.id}
                   onCardInteract={playCardClick}
                   player={player}
+                  tableMinimum={roomSession.room.table.minimum}
                 />
               ))}
             </div>
@@ -2292,6 +2352,7 @@ export default function BlackjackGame() {
                 isLocal
                 onCardInteract={playCardClick}
                 player={roomPlayer}
+                tableMinimum={roomSession.room.table.minimum}
               />
             ) : null}
             <div className="roomOpponentColumn roomOpponentColumnRight" aria-label="Players to your right">
@@ -2302,6 +2363,7 @@ export default function BlackjackGame() {
                   key={player.id}
                   onCardInteract={playCardClick}
                   player={player}
+                  tableMinimum={roomSession.room.table.minimum}
                 />
               ))}
             </div>
@@ -2309,7 +2371,9 @@ export default function BlackjackGame() {
 
           <div className="roomGameControls">
             {roomSession.room.phase === "betting" ? (
-              roomPlayer?.bet ? (
+              !roomPlayerCanBet ? (
+                <strong>You are out of tokens for this table. You can still watch{isRoomHost ? " and open the next round" : ""}.</strong>
+              ) : roomPlayer?.bet ? (
                 <strong>Bet placed — waiting for the table</strong>
               ) : (
                 <>
@@ -2317,9 +2381,9 @@ export default function BlackjackGame() {
                     <button
                       className="roomWagerReset"
                       type="button"
-                      onClick={() => setRoomWager(roomSession.room.table.minimum)}
+                      onClick={() => setRoomWager(0)}
                     >
-                      Reset
+                      Clear
                     </button>
                     {roomSession.room.table.chips.map((chip) => (
                       <button
@@ -2347,7 +2411,7 @@ export default function BlackjackGame() {
                     className="dealButton"
                     type="button"
                     onClick={() => sendRoomAction("bet", roomWager)}
-                    disabled={roomBusy || roomWager > (roomPlayer?.bankroll ?? 0)}
+                    disabled={roomBusy || roomWager < roomSession.room.table.minimum || roomWager > (roomPlayer?.bankroll ?? 0)}
                   >
                     Place bet
                   </button>
@@ -2429,7 +2493,7 @@ export default function BlackjackGame() {
             <i />
             <span><b>3:2</b> blackjack</span>
             <i />
-            <span><b>S17</b> dealer stands</span>
+            <span><b>H17</b> dealer hits soft 17</span>
           </div>
           <div className="roomEntryActions">
             <button type="button" onClick={() => openRoom("create")}>
@@ -2836,7 +2900,7 @@ export default function BlackjackGame() {
             <label>
               <span>Passcode</span>
               <input
-                type="password"
+                type="text"
                 value={roomPasscode}
                 onChange={(event) => setRoomPasscode(event.target.value)}
                 placeholder="4 characters or more"
@@ -2848,7 +2912,7 @@ export default function BlackjackGame() {
             </label>
             {roomMode === "create" ? (
               <div className="roomStackNote">
-                Starting stack <strong>{tokenAmount(wallet)} tokens</strong>
+                Starting stack <strong>{tokenAmount(RESET_BALANCE)} tokens</strong>
               </div>
             ) : null}
             {roomError ? <div className="roomError" role="alert">{roomError}</div> : null}
