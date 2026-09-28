@@ -1,13 +1,19 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   canSplit,
+  bustPhrase,
+  createBurnedShoe,
   createCutPoint,
-  createShoe,
   DECK_COUNT,
+  EMPTY_SIDE_BETS,
   isBlackjack,
+  isValidTokenBalance,
   MAX_SPLIT_HANDS,
   playDealer,
   scoreHand,
+  settleSideBets,
+  type SideBets,
+  type SideBetOutcome,
   type Card,
 } from "../blackjack";
 
@@ -44,6 +50,8 @@ type StoredPlayer = {
   joinedAt: number;
   hands: RoomHand[];
   activeHand: number;
+  sideBets: SideBets;
+  sideBetResults: SideBetOutcome[];
 };
 
 export type RoomPlayer = Omit<StoredPlayer, "sessionHash">;
@@ -63,6 +71,7 @@ type StoredRoom = {
   table: RoomTable;
   players: StoredPlayer[];
   shoe: Card[];
+  burnedCard: Card;
   cutPoint: number;
   dealer: Card[];
   currentPlayerId: string | null;
@@ -84,11 +93,14 @@ export type PublicRoom = Omit<
 
 type RoomStoreGlobal = typeof globalThis & {
   __dealersEdgeRooms?: Map<string, StoredRoom>;
+  __dealersEdgeRoomSubscribers?: Map<string, Set<(room: PublicRoom | null) => void>>;
 };
 
 const sharedGlobal = globalThis as RoomStoreGlobal;
 const rooms = sharedGlobal.__dealersEdgeRooms ?? new Map<string, StoredRoom>();
 sharedGlobal.__dealersEdgeRooms = rooms;
+const subscribers = sharedGlobal.__dealersEdgeRoomSubscribers ?? new Map<string, Set<(room: PublicRoom | null) => void>>();
+sharedGlobal.__dealersEdgeRoomSubscribers = subscribers;
 
 const ROOM_LIFETIME_MS = 6 * 60 * 60 * 1000;
 const MAX_PLAYERS = 5;
@@ -137,7 +149,10 @@ function draw(shoe: Card[]) {
 function pruneExpiredRooms() {
   const expiry = Date.now() - ROOM_LIFETIME_MS;
   for (const [code, room] of rooms) {
-    if (room.updatedAt < expiry) rooms.delete(code);
+    if (room.updatedAt < expiry) {
+      rooms.delete(code);
+      broadcastClosed(code);
+    }
   }
 }
 
@@ -162,7 +177,26 @@ function publicRoom(room: StoredRoom): PublicRoom {
 function touch(room: StoredRoom) {
   room.updatedAt = Date.now();
   room.version += 1;
-  return publicRoom(room);
+  const snapshot = publicRoom(room);
+  for (const listener of subscribers.get(room.code) ?? []) listener(snapshot);
+  return snapshot;
+}
+
+function broadcastClosed(code: string) {
+  for (const listener of subscribers.get(code) ?? []) listener(null);
+  subscribers.delete(code);
+}
+
+export function subscribeRoom(code: string, listener: (room: PublicRoom | null) => void) {
+  const room = requireRoom(code);
+  const roomListeners = subscribers.get(room.code) ?? new Set<(room: PublicRoom | null) => void>();
+  roomListeners.add(listener);
+  subscribers.set(room.code, roomListeners);
+  listener(publicRoom(room));
+  return () => {
+    roomListeners.delete(listener);
+    if (!roomListeners.size) subscribers.delete(room.code);
+  };
 }
 
 function requireRoom(code: string) {
@@ -184,7 +218,7 @@ function activeHands(player: StoredPlayer) {
 }
 
 function playablePlayers(room: StoredRoom) {
-  return room.players.filter((player) => player.bankroll >= room.table.minimum);
+  return room.players.filter((player) => player.bet > 0 || player.bankroll >= room.table.minimum);
 }
 
 function settleRoom(room: StoredRoom) {
@@ -221,7 +255,9 @@ function settleRoom(room: StoredRoom) {
 
   room.phase = "settled";
   room.currentPlayerId = null;
-  room.message = dealerTotal > 21 ? "Dealer busts — round settled" : `Dealer stands on ${dealerTotal}`;
+  room.message = isBlackjack(room.dealer)
+    ? "Dealer blackjack"
+    : dealerTotal > 21 ? "Dealer busts — round settled" : `Dealer stands on ${dealerTotal}`;
 }
 
 function advanceTurn(room: StoredRoom) {
@@ -259,6 +295,12 @@ function dealRoomRound(room: StoredRoom) {
   for (const player of participating) player.hands[0].cards.push(draw(room.shoe));
   room.dealer.push(draw(room.shoe));
 
+  for (const player of participating) {
+    const result = settleSideBets(player.hands[0].cards, room.dealer[0], player.sideBets);
+    player.bankroll += result.payout;
+    player.sideBetResults = result.outcomes;
+  }
+
   const dealerNatural = isBlackjack(room.dealer);
   for (const player of participating) {
     const hand = player.hands[0];
@@ -277,7 +319,7 @@ function dealRoomRound(room: StoredRoom) {
   if (dealerNatural) {
     room.phase = "settled";
     room.currentPlayerId = null;
-    room.message = "Dealer has blackjack";
+    room.message = "Dealer blackjack";
     return;
   }
 
@@ -300,6 +342,14 @@ export class RoomError extends Error {
   }
 }
 
+function startingBankroll(value: number | undefined) {
+  if (value === undefined) return 500;
+  if (!isValidTokenBalance(value)) {
+    throw new RoomError("Starting token balance must be a nonnegative number of whole or half tokens", 400);
+  }
+  return value;
+}
+
 export function createRoom(input: {
   name: string;
   passcode: string;
@@ -313,7 +363,7 @@ export function createRoom(input: {
 
   let code = roomCode();
   while (rooms.has(code)) code = roomCode();
-  const bankroll = 500;
+  const bankroll = startingBankroll(input.startingBankroll);
   const selectedTable = ROOM_TABLES[0];
   const hostToken = playerToken();
   const host: StoredPlayer = {
@@ -326,7 +376,10 @@ export function createRoom(input: {
     joinedAt: Date.now(),
     hands: [],
     activeHand: 0,
+    sideBets: { ...EMPTY_SIDE_BETS },
+    sideBetResults: [],
   };
+  const freshShoe = createBurnedShoe(DECK_COUNT);
   const room: StoredRoom = {
     code,
     passcodeHash: hashPasscode(code, passcode),
@@ -334,7 +387,8 @@ export function createRoom(input: {
     phase: "lobby",
     table: { ...selectedTable, chips: [...selectedTable.chips] },
     players: [host],
-    shoe: createShoe(DECK_COUNT),
+    shoe: freshShoe.shoe,
+    burnedCard: freshShoe.burnedCard,
     cutPoint: createCutPoint(),
     dealer: [],
     currentPlayerId: null,
@@ -348,7 +402,7 @@ export function createRoom(input: {
   return { room: publicRoom(room), playerId: hostToken, seatId: host.id };
 }
 
-export function joinRoom(input: { code: string; name: string; passcode: string }) {
+export function joinRoom(input: { code: string; name: string; passcode: string; startingBankroll?: number }) {
   const room = requireRoom(input.code);
   const name = cleanName(input.name);
   if (name.length < 2) throw new RoomError("Enter a name with at least 2 characters", 400);
@@ -356,21 +410,27 @@ export function joinRoom(input: { code: string; name: string; passcode: string }
     throw new RoomError("Incorrect room passcode", 403);
   }
   if (room.players.length >= MAX_PLAYERS) throw new RoomError("This table is full", 409);
-  if (room.phase !== "lobby") throw new RoomError("This table has already started", 409);
 
   const playerTokenValue = playerToken();
   const player: StoredPlayer = {
     id: randomBytes(6).toString("base64url"),
     sessionHash: hashPlayerToken(playerTokenValue),
     name,
-    bankroll: 500,
+    bankroll: startingBankroll(input.startingBankroll),
     bet: 0,
     ready: false,
     joinedAt: Date.now(),
     hands: [],
     activeHand: 0,
+    sideBets: { ...EMPTY_SIDE_BETS },
+    sideBetResults: [],
   };
   room.players.push(player);
+  if (room.phase !== "lobby") {
+    room.message = room.phase === "betting"
+      ? `${player.name} joined — place your bet`
+      : `${player.name} joined and will play next round`;
+  }
   return { room: touch(room), playerId: playerTokenValue, seatId: player.id };
 }
 
@@ -402,31 +462,81 @@ export function startRoom(code: string, playerId: string) {
 export function roomAction(
   code: string,
   playerId: string,
-  action: "bet" | "hit" | "stand" | "double" | "split" | "surrender" | "next-round",
+  action: "bet" | "hit" | "stand" | "double" | "split" | "surrender" | "next-round" | "donate" | "leave" | "kick",
   amount?: number,
+  targetId?: string,
+  sideBets?: SideBets,
 ) {
   const room = requireRoom(code);
   const player = requirePlayer(room, playerId);
 
+  if (action === "leave" || action === "kick") {
+    if (action === "kick" && player.id !== room.hostId) throw new RoomError("Only the host can remove a player", 403);
+    const target = action === "leave" ? player : room.players.find((candidate) => candidate.id === targetId);
+    if (!target) throw new RoomError("Player not found", 404);
+    if (action === "kick" && target.id === player.id) throw new RoomError("Use Leave room to exit", 400);
+    const wasCurrent = room.currentPlayerId === target.id;
+    const targetIndex = room.players.indexOf(target);
+    room.players.splice(targetIndex, 1);
+    if (!room.players.length) {
+      rooms.delete(room.code);
+      broadcastClosed(room.code);
+      return null;
+    }
+    if (target.id === room.hostId) room.hostId = room.players[0].id;
+    if (room.phase === "playing" && wasCurrent) {
+      const next = room.players.slice(targetIndex).find((candidate) => activeHands(candidate).length);
+      if (next) {
+        room.currentPlayerId = next.id;
+        next.activeHand = next.hands.findIndex((hand) => hand.status === "active");
+        room.message = `${next.name}’s turn`;
+      } else settleRoom(room);
+    } else if (room.phase === "betting" && playablePlayers(room).length && playablePlayers(room).every((candidate) => candidate.bet > 0)) {
+      dealRoomRound(room);
+    }
+    if (room.phase === "lobby") room.message = `${target.name} left the table`;
+    return touch(room);
+  }
+
+  if (action === "donate") {
+    const recipient = room.players.find((candidate) => candidate.id === targetId);
+    if (!recipient || recipient.id === player.id) throw new RoomError("Choose another seated player", 400);
+    if (!Number.isSafeInteger(amount) || !amount || amount <= 0 || amount > player.bankroll) {
+      throw new RoomError("Enter a whole token amount within your balance", 400);
+    }
+    const transfer = amount as number;
+    player.bankroll -= transfer;
+    recipient.bankroll += transfer;
+    room.message = `${player.name} sent ${transfer} tokens to ${recipient.name}`;
+    return touch(room);
+  }
+
   if (action === "next-round") {
     if (player.id !== room.hostId) throw new RoomError("Only the host can open the next round", 403);
     if (room.phase !== "settled") throw new RoomError("The current round is not settled", 409);
-    if (room.shoe.length <= room.cutPoint) {
-      room.shoe = createShoe(DECK_COUNT);
+    const shuffled = room.shoe.length <= room.cutPoint;
+    if (shuffled) {
+      const freshShoe = createBurnedShoe(DECK_COUNT);
+      room.shoe = freshShoe.shoe;
+      room.burnedCard = freshShoe.burnedCard;
       room.cutPoint = createCutPoint();
     }
-    const playableCount = playablePlayers(room).length;
+    const playableCount = room.players.filter((candidate) => candidate.bankroll >= room.table.minimum).length;
     room.dealer = [];
     room.currentPlayerId = null;
     room.phase = "betting";
     room.round += 1;
     room.message = playableCount
-      ? `Place bets — minimum ${room.table.minimum}`
+      ? shuffled
+        ? `Fresh ${DECK_COUNT}-deck shoe shuffled. Burned ${room.burnedCard.rank} of ${room.burnedCard.suit}. Place bets — minimum ${room.table.minimum}`
+        : `Place bets — minimum ${room.table.minimum}`
       : "No players have enough tokens for the next round";
     for (const candidate of room.players) {
       candidate.bet = 0;
       candidate.hands = [];
       candidate.activeHand = 0;
+      candidate.sideBets = { ...EMPTY_SIDE_BETS };
+      candidate.sideBetResults = [];
     }
     return touch(room);
   }
@@ -436,12 +546,22 @@ export function roomAction(
     if (player.bankroll < room.table.minimum) {
       throw new RoomError("You do not have enough tokens for this table", 409);
     }
-    const wager = Math.floor(amount ?? 0);
+    if (!Number.isSafeInteger(amount)) throw new RoomError("Enter a whole token wager", 400);
+    const wager = amount as number;
+    const selectedSideBets = { ...EMPTY_SIDE_BETS };
+    for (const key of Object.keys(selectedSideBets) as Array<keyof SideBets>) {
+      const value = sideBets?.[key] ?? 0;
+      if (!Number.isSafeInteger(value) || value < 0) throw new RoomError("Invalid side bet", 400);
+      selectedSideBets[key] = value;
+    }
+    const totalStake = wager + Object.values(selectedSideBets).reduce((sum, value) => sum + value, 0);
     if (wager < room.table.minimum) throw new RoomError(`Minimum bet is ${room.table.minimum}`, 400);
-    if (wager > player.bankroll) throw new RoomError("Not enough tokens", 409);
+    if (totalStake > player.bankroll) throw new RoomError("Not enough tokens", 409);
     if (player.bet > 0) throw new RoomError("Bet already placed", 409);
     player.bet = wager;
-    player.bankroll -= wager;
+    player.sideBets = selectedSideBets;
+    player.sideBetResults = [];
+    player.bankroll -= totalStake;
     room.message = `${player.name} is in for ${wager}`;
     if (playablePlayers(room).every((candidate) => candidate.bet > 0)) dealRoomRound(room);
     return touch(room);
@@ -458,6 +578,7 @@ export function roomAction(
     if (total > 21) {
       hand.status = "busted";
       hand.result = "BUST";
+      room.message = `${player.name} busts. ${bustPhrase()}`;
       advanceTurn(room);
     } else if (total === 21) {
       hand.status = "standing";

@@ -9,11 +9,12 @@ export async function POST(
 ) {
   try {
     const { code } = await params;
-    const body = (await request.json()) as { name?: string; passcode?: string };
+    const body = (await request.json()) as { name?: string; passcode?: string; startingBankroll?: number };
     const result = joinRoom({
       code,
       name: body.name ?? "",
       passcode: body.passcode ?? "",
+      startingBankroll: body.startingBankroll,
     });
     return NextResponse.json(result);
   } catch (error) {

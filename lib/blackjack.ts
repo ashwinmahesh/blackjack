@@ -32,10 +32,66 @@ export type HandScore = {
 export const DECK_COUNT = 6;
 export const SHOE_SIZE = DECK_COUNT * 52;
 export const MAX_SPLIT_HANDS = 5;
+export type GameMode = "classic" | "doubleDownMadness" | "freeBet";
+export type SideBetKey = "perfectPairs" | "twentyOnePlusThree" | "matchDealer" | "topThree";
+export type SideBets = Record<SideBetKey, number>;
+export const EMPTY_SIDE_BETS: SideBets = {
+  perfectPairs: 0,
+  twentyOnePlusThree: 0,
+  matchDealer: 0,
+  topThree: 0,
+};
+export const SIDE_BET_LABELS: Record<SideBetKey, { name: string; short: string }> = {
+  perfectPairs: { name: "Perfect Pairs", short: "Pairs" },
+  twentyOnePlusThree: { name: "21 + 3", short: "21 + 3" },
+  matchDealer: { name: "Match the Dealer", short: "Match" },
+  topThree: { name: "Top 3", short: "Top 3" },
+};
+
+export const BUST_PHRASES = [
+  "Better luck next time, buddy!",
+  "So embarrassing.",
+  "The dealer says thanks.",
+  "That was a bold way to find 22.",
+  "Maybe the next card will apologize.",
+  "The shoe had other plans.",
+];
+
+export function isValidTokenBalance(value: unknown): value is number {
+  return typeof value === "number" && value >= 0 && Number.isSafeInteger(value * 2);
+}
+
+export function bustPhrase(random = Math.random) {
+  return BUST_PHRASES[Math.floor(random() * BUST_PHRASES.length)];
+}
+
+export function createBurnedShoe(decks = DECK_COUNT, random = Math.random) {
+  const shoe = createShoe(decks, random);
+  const burnedCard = shoe.pop()!;
+  return { shoe, burnedCard };
+}
+
+export function isFreeDouble(cards: Card[]): boolean {
+  if (cards.length !== 2) return false;
+  const score = scoreHand(cards);
+  return !score.isSoft && score.total >= 9 && score.total <= 11;
+}
+
+export function isFreeSplit(cards: Card[]): boolean {
+  return canSplit(cards) && !["10", "J", "Q", "K"].includes(cards[0].rank);
+}
 
 export type SideBetResult = {
   label: string;
   payout: number;
+};
+
+export type SideBetOutcome = {
+  name: string;
+  detail: string;
+  won: boolean;
+  stake: number;
+  profit: number;
 };
 
 export type BasicStrategyMove = "Hit" | "Stand" | "Double" | "Split" | "Surrender";
@@ -258,8 +314,8 @@ export function scorePerfectPairs(cards: Card[]): SideBetResult | null {
   const redSuits: Suit[] = ["hearts", "diamonds"];
   const sameColor = redSuits.includes(cards[0].suit) === redSuits.includes(cards[1].suit);
   return sameColor
-    ? { label: "Colored pair", payout: 10 }
-    : { label: "Mixed pair", payout: 5 };
+    ? { label: "Colored pair", payout: 12 }
+    : { label: "Mixed pair", payout: 6 };
 }
 
 export function scoreTwentyOnePlusThree(cards: Card[]): SideBetResult | null {
@@ -309,6 +365,45 @@ export function scoreMatchDealer(
         : "Rank match";
 
   return { label, payout };
+}
+
+export function scoreTopThree(cards: Card[]): SideBetResult | null {
+  const result = scoreTwentyOnePlusThree(cards);
+  if (!result) return null;
+  if (result.label === "Suited trips") return { label: "Suited trips grand slam", payout: 270 };
+  if (result.label === "Straight flush") return { label: "Straight flush", payout: 180 };
+  if (result.label === "Three of a kind") return { label: "Three of a kind", payout: 90 };
+  return null;
+}
+
+export function settleSideBets(
+  playerCards: Card[],
+  dealerUpCard: Card,
+  sideBets: SideBets,
+) {
+  const results = {
+    perfectPairs: scorePerfectPairs(playerCards),
+    twentyOnePlusThree: scoreTwentyOnePlusThree([...playerCards, dealerUpCard]),
+    matchDealer: scoreMatchDealer(playerCards, dealerUpCard),
+    topThree: scoreTopThree([...playerCards, dealerUpCard]),
+  };
+  return (Object.keys(results) as SideBetKey[]).reduce(
+    (outcome, key) => {
+      const wager = sideBets[key];
+      if (!wager) return outcome;
+      const result = results[key];
+      if (result) outcome.payout += wager * (result.payout + 1);
+      outcome.outcomes.push({
+        name: SIDE_BET_LABELS[key].name,
+        detail: result ? `${result.label} · ${result.payout}:1` : "No hit",
+        won: Boolean(result),
+        stake: wager,
+        profit: result ? wager * result.payout : 0,
+      });
+      return outcome;
+    },
+    { payout: 0, outcomes: [] as SideBetOutcome[] },
+  );
 }
 
 export function dealerShouldHit(cards: Card[]): boolean {

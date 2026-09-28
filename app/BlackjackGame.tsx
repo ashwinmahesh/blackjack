@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { sendGAEvent } from "@next/third-parties/google";
 import type {
   CSSProperties,
   FormEvent,
@@ -10,37 +11,37 @@ import type {
 import {
   type BasicStrategyAdvice,
   canSplit,
+  bustPhrase,
+  createBurnedShoe,
   Card as CardType,
   createCutPoint,
-  createShoe,
   DECK_COUNT,
   dealerShouldHit,
+  EMPTY_SIDE_BETS,
   getBasicStrategyAdvice,
   isBlackjack,
+  isFreeDouble,
+  isFreeSplit,
+  isValidTokenBalance,
   MAX_SPLIT_HANDS,
   playDealer,
   scoreHand,
-  scoreMatchDealer,
-  scorePerfectPairs,
-  scoreTwentyOnePlusThree,
+  settleSideBets,
+  SIDE_BET_LABELS,
   SHOE_SIZE,
+  type GameMode,
+  type SideBetKey,
+  type SideBetOutcome,
+  type SideBets,
 } from "../lib/blackjack";
 
 type Phase = "betting" | "dealing" | "playing" | "dealerTurn" | "settled" | "shuffling";
 type HandStatus = "active" | "standing" | "busted" | "won" | "lost" | "push" | "surrendered";
-type SideBetKey = "perfectPairs" | "twentyOnePlusThree" | "matchDealer";
-type SideBets = Record<SideBetKey, number>;
 type SeenCardCounts = Record<CardType["rank"], number>;
 type SoloHandCount = 1 | 2 | 3;
 type SoundKind = "deal" | "flip" | "win" | "sidebet" | "blackjack" | "achievement" | "lose" | "tableBust" | "shuffle" | "chip" | "entry" | "click";
 type NavigatorWithAudioSession = Navigator & {
   audioSession?: { type: "auto" | "playback" | "transient" | "transient-solo" | "ambient" | "play-and-record" };
-};
-
-type SideBetOutcome = {
-  name: string;
-  detail: string;
-  won: boolean;
 };
 
 type PlayerHand = {
@@ -49,6 +50,7 @@ type PlayerHand = {
   status: HandStatus;
   result?: string;
   fromSplit?: boolean;
+  freeStake?: number;
 };
 
 type GameState = {
@@ -56,6 +58,7 @@ type GameState = {
   startingBankroll: number;
   currentBet: number;
   sideBets: SideBets;
+  roundSideBetOutcomes: SideBetOutcome[];
   seenCardCounts: SeenCardCounts;
   dealerHoleSeen: boolean;
   shoe: CardType[];
@@ -68,6 +71,8 @@ type GameState = {
   message: string;
   tone: "neutral" | "win" | "loss";
   round: number;
+  mode: GameMode;
+  burnedCard: CardType;
 };
 
 type RoomPlayerView = {
@@ -84,6 +89,8 @@ type RoomPlayerView = {
     result?: string;
   }>;
   activeHand: number;
+  sideBets: SideBets;
+  sideBetResults: SideBetOutcome[];
 };
 
 type RoomView = {
@@ -97,7 +104,9 @@ type RoomView = {
   message: string;
   round: number;
   shoeRemaining: number;
+  burnedCard: CardType;
   version: number;
+  updatedAt: number;
 };
 
 type RoomSession = {
@@ -106,6 +115,13 @@ type RoomSession = {
   seatId: string;
   passcode: string;
   room: RoomView;
+};
+
+type PendingRoomAction = {
+  action: "bet" | "hit" | "stand" | "double" | "split" | "surrender";
+  round: number;
+  amount?: number;
+  sideBets?: SideBets;
 };
 
 const TABLES = [
@@ -118,7 +134,6 @@ const WALLET_KEY = "dealers-edge-token-balance";
 const ACHIEVEMENTS_KEY = "dealers-edge-token-achievements-v2";
 const SOLO_HAND_COUNT_KEY = "ashwins-blackjack-solo-hand-count";
 const RESET_BALANCE = 500;
-const LOWEST_TABLE_MINIMUM = TABLES[0].minimum;
 const ACHIEVEMENT_THRESHOLDS = [
   1000,
   2500,
@@ -131,25 +146,35 @@ const ACHIEVEMENT_THRESHOLDS = [
   500000,
   1000000,
 ] as const;
-const EMPTY_SIDE_BETS: SideBets = {
-  perfectPairs: 0,
-  twentyOnePlusThree: 0,
-  matchDealer: 0,
-};
-const SIDE_BET_LABELS: Record<SideBetKey, { name: string; short: string }> = {
-  perfectPairs: { name: "Perfect Pairs", short: "Pairs" },
-  twentyOnePlusThree: { name: "21 + 3", short: "21 + 3" },
-  matchDealer: { name: "Match the Dealer", short: "Match" },
-};
+const GAME_MODES: Array<{ id: GameMode; name: string; description: string }> = [
+  { id: "classic", name: "Classic", description: "Traditional blackjack, splits and surrender" },
+  { id: "doubleDownMadness", name: "Double Down Madness", description: "Start with one card, redouble and keep hitting; dealer 22 pushes" },
+  { id: "freeBet", name: "Free Bet", description: "Free doubles on hard 9–11 and free non-ten splits; dealer 22 pushes" },
+];
 const CARD_COUNT_RANKS: CardType["rank"][] = [
   "A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3", "2",
 ];
 
 const DEAL_DELAY = 330;
+const ROOM_DEAL_DELAY = 100;
 const cardBounceAnimations = new WeakMap<HTMLDivElement, Animation>();
 
 function pause(milliseconds: number) {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function recordRoomPerformance(kind: string, duration: number) {
+  const root = document.documentElement;
+  let previous: Array<{ kind: string; ms: number }> = [];
+  try {
+    previous = JSON.parse(root.dataset.blackjackPerformance ?? "[]");
+  } catch {
+    // A bad debug attribute should never affect play.
+  }
+  root.dataset.blackjackPerformance = JSON.stringify([
+    ...previous.slice(-29),
+    { kind, ms: Math.round(duration * 10) / 10 },
+  ]);
 }
 const SUIT_MARKS: Record<CardType["suit"], string> = {
   spades: "♠",
@@ -192,49 +217,26 @@ function totalOpeningStake(mainBet: number, sideBets: SideBets, handCount: numbe
   return (mainBet + sideBetStake(sideBets)) * handCount;
 }
 
-function settleSideBets(
-  playerCards: CardType[],
-  dealerUpCard: CardType,
-  sideBets: SideBets,
-): { payout: number; outcomes: SideBetOutcome[] } {
-  const entries = [
-    {
-      key: "perfectPairs" as const,
-      result: scorePerfectPairs(playerCards),
-    },
-    {
-      key: "twentyOnePlusThree" as const,
-      result: scoreTwentyOnePlusThree([...playerCards, dealerUpCard]),
-    },
-    {
-      key: "matchDealer" as const,
-      result: scoreMatchDealer(playerCards, dealerUpCard),
-    },
-  ];
-  let payout = 0;
-  const outcomes: SideBetOutcome[] = [];
-
-  for (const entry of entries) {
-    const wager = sideBets[entry.key];
-    if (!wager) continue;
-
-    if (entry.result) {
-      payout += wager * (entry.result.payout + 1);
-      outcomes.push({
-        name: SIDE_BET_LABELS[entry.key].name,
-        detail: `${entry.result.label} · ${entry.result.payout}:1`,
-        won: true,
-      });
-    } else {
-      outcomes.push({
-        name: SIDE_BET_LABELS[entry.key].name,
-        detail: "No hit",
-        won: false,
-      });
+function roundTokenTotals(
+  hands: Array<Pick<PlayerHand, "bet" | "result" | "freeStake">>,
+  sideBetOutcomes: SideBetOutcome[],
+) {
+  let tokensWon = 0;
+  let tokensLost = 0;
+  for (const hand of hands) {
+    if (hand.result === "BLACKJACK") tokensWon += hand.bet * 1.5;
+    else if (hand.result === "WIN" || hand.result === "DEALER BUST") {
+      tokensWon += hand.bet + (hand.freeStake ?? 0);
+    } else if (hand.result === "SURRENDER") tokensLost += hand.bet - Math.floor(hand.bet / 2);
+    else if (["BUST", "DEALER WINS", "DEALER BLACKJACK"].includes(hand.result ?? "")) {
+      tokensLost += hand.bet;
     }
   }
-
-  return { payout, outcomes };
+  for (const outcome of sideBetOutcomes) {
+    if (outcome.won) tokensWon += outcome.profit;
+    else tokensLost += outcome.stake;
+  }
+  return { tokens_won: tokensWon, tokens_lost: tokensLost };
 }
 
 function settleRound(state: GameState): GameState {
@@ -266,8 +268,13 @@ function settleRound(state: GameState): GameState {
       lost += 1;
       return { ...hand, status: "lost" as const, result: "BUST" };
     }
+    if ((state.mode !== "classic" && dealerScore === 22) || playerScore === dealerScore) {
+      payout += hand.bet;
+      pushed += 1;
+      return { ...hand, status: "push" as const, result: dealerScore === 22 ? "PUSH 22" : "PUSH" };
+    }
     if (dealerScore > 21 || playerScore > dealerScore) {
-      payout += hand.bet * 2;
+      payout += hand.bet * 2 + (hand.freeStake ?? 0);
       won += 1;
       return {
         ...hand,
@@ -275,12 +282,6 @@ function settleRound(state: GameState): GameState {
         result: dealerScore > 21 ? "DEALER BUST" : "WIN",
       };
     }
-    if (playerScore === dealerScore) {
-      payout += hand.bet;
-      pushed += 1;
-      return { ...hand, status: "push" as const, result: "PUSH" };
-    }
-
     lost += 1;
     return { ...hand, status: "lost" as const, result: "DEALER WINS" };
   });
@@ -305,7 +306,7 @@ function settleRound(state: GameState): GameState {
     shoe: dealerPlay.shoe,
     hands,
     phase: "settled",
-    message,
+    message: pushed === hands.length && dealerScore === 22 ? "Dealer 22 — standing hands push" : message,
     tone: won > lost ? "win" : won === lost ? "neutral" : "loss",
   };
 }
@@ -443,18 +444,22 @@ function roomDealerTotalLabel(cards: Array<CardType | null>) {
   return roomHandTotalLabel(visibleCards);
 }
 
-function RoomPlayerSeat({
+function RoomPlayerSeatView({
   player,
   isLocal,
   isActive,
   tableMinimum,
+  roomPhase,
   onCardInteract,
+  onSelect,
 }: {
   player: RoomPlayerView;
   isLocal: boolean;
   isActive: boolean;
   tableMinimum: number;
+  roomPhase: RoomView["phase"];
   onCardInteract: () => void;
+  onSelect?: (playerId: string) => void;
 }) {
   const canPlayNextRound = player.bankroll >= tableMinimum;
   return (
@@ -468,14 +473,18 @@ function RoomPlayerSeat({
         </span>
       ) : null}
       <header className="roomPlayerSeatHeader">
-        <span className="roomPlayerIdentity">
+        {onSelect ? <button className="roomPlayerIdentity roomPlayerSelect" type="button" onClick={() => onSelect(player.id)} aria-label={`Send tokens to ${player.name}`}>
+          <i className="roomPlayerAvatar">{player.name.slice(0, 1).toUpperCase()}</i>
+          <span><small>Player</small><strong>{player.name}</strong></span>
+        </button> : <span className="roomPlayerIdentity">
           <i className="roomPlayerAvatar">{player.name.slice(0, 1).toUpperCase()}</i>
           <span>
             <small>{isLocal ? "Your hand" : "Player"}</small>
             <strong>{player.name}</strong>
           </span>
-        </span>
+        </span>}
         <span className="roomPlayerBalance">◎ {tokenAmount(player.bankroll)}</span>
+        {onSelect ? <button className="roomSendButton" type="button" onClick={() => onSelect(player.id)}>Send tokens</button> : null}
       </header>
       {player.hands.length ? (
         <div
@@ -492,7 +501,7 @@ function RoomPlayerSeat({
                   <PlayingCard
                     animated={isLocal}
                     card={card}
-                    delayMs={isLocal ? cardIndex * DEAL_DELAY + handIndex * 80 : 0}
+                    delayMs={isLocal && hand.cards.length <= 2 ? cardIndex * ROOM_DEAL_DELAY + handIndex * 40 : 0}
                     key={card.id}
                     motion={isLocal ? "player" : undefined}
                     onInteract={onCardInteract}
@@ -509,13 +518,32 @@ function RoomPlayerSeat({
           {player.bet
             ? `Bet ${tokenAmount(player.bet)}`
             : canPlayNextRound
-              ? "Waiting for bet"
+              ? roomPhase === "playing" || roomPhase === "settled" ? "Joins next round" : "Waiting for bet"
               : "Out of tokens"}
         </div>
       )}
+      {player.sideBetResults?.filter((outcome) => outcome.won).map((outcome) => (
+        <div className="roomSideBetWin" key={outcome.name}>{outcome.name}: {outcome.detail}</div>
+      ))}
     </article>
   );
 }
+
+const RoomPlayerSeat = memo(RoomPlayerSeatView, (previous, next) =>
+  previous.isLocal === next.isLocal &&
+  previous.isActive === next.isActive &&
+  previous.tableMinimum === next.tableMinimum &&
+  previous.roomPhase === next.roomPhase &&
+  previous.onCardInteract === next.onCardInteract &&
+  previous.onSelect === next.onSelect &&
+  previous.player.id === next.player.id &&
+  previous.player.name === next.player.name &&
+  previous.player.bankroll === next.player.bankroll &&
+  previous.player.bet === next.player.bet &&
+  previous.player.activeHand === next.player.activeHand &&
+  JSON.stringify(previous.player.hands) === JSON.stringify(next.player.hands) &&
+  JSON.stringify(previous.player.sideBetResults) === JSON.stringify(next.player.sideBetResults),
+);
 
 function DeckIcon() {
   return (
@@ -569,6 +597,16 @@ function GitHubIcon() {
       />
     </svg>
   );
+}
+
+function ModeIcon({ mode }: { mode: GameMode }) {
+  if (mode === "classic") {
+    return <svg viewBox="0 0 28 28" aria-hidden="true"><rect x="4" y="6" width="15" height="19" rx="2" /><rect x="10" y="3" width="15" height="19" rx="2" /><path d="M17.5 10.5 20 14l-2.5 3.5L15 14l2.5-3.5Z" /></svg>;
+  }
+  if (mode === "doubleDownMadness") {
+    return <svg viewBox="0 0 28 28" aria-hidden="true"><path d="m16 2-9 13h7l-2 11 9-14h-7l2-10Z" /></svg>;
+  }
+  return <svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" /><circle cx="14" cy="14" r="7" /><path d="M14 9v10M9 14h10" /></svg>;
 }
 
 function HandValue({ cards, hidden = false }: { cards: CardType[]; hidden?: boolean }) {
@@ -665,6 +703,8 @@ export default function BlackjackGame() {
   const [wallet, setWallet] = useState(RESET_BALANCE);
   const [walletLoaded, setWalletLoaded] = useState(false);
   const [selectedTableId, setSelectedTableId] = useState<string>(TABLES[0].id);
+  const [selectedMode, setSelectedMode] = useState<GameMode>("classic");
+  const modeDropdownRef = useRef<HTMLDetailsElement | null>(null);
   const [game, setGame] = useState<GameState | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -680,6 +720,10 @@ export default function BlackjackGame() {
   const [roomSession, setRoomSession] = useState<RoomSession | null>(null);
   const [homeNotice, setHomeNotice] = useState("");
   const [roomWager, setRoomWager] = useState(10);
+  const [pendingRoomAction, setPendingRoomAction] = useState<PendingRoomAction | null>(null);
+  const [roomSideBets, setRoomSideBets] = useState<SideBets>({ ...EMPTY_SIDE_BETS });
+  const [donationTarget, setDonationTarget] = useState<string | null>(null);
+  const [donationAmount, setDonationAmount] = useState("");
   const [roomLinkCopied, setRoomLinkCopied] = useState(false);
   const [cardCountOpen, setCardCountOpen] = useState(false);
   const [strategyOpen, setStrategyOpen] = useState(false);
@@ -701,17 +745,80 @@ export default function BlackjackGame() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioNeedsRebuildRef = useRef(false);
   const previousRoomRef = useRef<RoomView | null>(null);
+  const roomVersionReceivedAtRef = useRef(new Map<number, number>());
   const previousAchievementBalanceRef = useRef<number | null>(null);
   const previousAchievementSourceRef = useRef("");
   const achievementQueueRef = useRef<number[]>([]);
   const lastTableBustRoundRef = useRef("");
+  const analyticsSessionIdRef = useRef(0);
+  const trackedRoundsRef = useRef(new Set<string>());
   const activeRoomCode = roomSession?.code;
+  const activeRoomSeatId = roomSession?.seatId;
+  const activeRoomVersion = roomSession?.room.version;
+  const activeRoomPhase = roomSession?.room.phase;
+  const screenKey = roomSession
+    ? roomSession.room.phase === "lobby" ? "lobby" : "roomGame"
+    : game ? "solo" : "home";
   const gameBankroll = game?.bankroll;
   const selectedTable = TABLES.find((table) => table.id === selectedTableId) ?? TABLES[0];
   const sideBetValues = [0, selectedTable.minimum / 2, selectedTable.minimum, selectedTable.minimum * 2];
   const seenCardTotal = game
     ? Object.values(game.seenCardCounts).reduce((total, count) => total + count, 0)
     : 0;
+
+  useEffect(() => {
+    const closeModeMenu = (event: PointerEvent) => {
+      if (modeDropdownRef.current && !modeDropdownRef.current.contains(event.target as Node)) {
+        modeDropdownRef.current.open = false;
+      }
+    };
+    document.addEventListener("pointerdown", closeModeMenu);
+    return () => document.removeEventListener("pointerdown", closeModeMenu);
+  }, []);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [screenKey]);
+
+  const applyRoomUpdate = useCallback((nextRoom: RoomView) => {
+    roomVersionReceivedAtRef.current.set(nextRoom.version, performance.now());
+    setRoomSession((current) => {
+      if (!current || current.code !== nextRoom.code || nextRoom.version <= current.room.version) return current;
+      return { ...current, room: nextRoom };
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    const version = roomSession?.room.version;
+    if (!version) return;
+    const receivedAt = roomVersionReceivedAtRef.current.get(version);
+    if (receivedAt === undefined) return;
+    roomVersionReceivedAtRef.current.delete(version);
+    const committedAt = performance.now();
+    performance.measure("blackjack:room-render-commit", { start: receivedAt, end: committedAt });
+    recordRoomPerformance("renderCommit", committedAt - receivedAt);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const paintedAt = performance.now();
+        performance.measure("blackjack:room-paint", { start: receivedAt, end: paintedAt });
+        recordRoomPerformance("paint", paintedAt - receivedAt);
+      });
+    });
+  }, [roomSession?.room.version]);
+
+  useEffect(() => {
+    if (!activeRoomVersion || activeRoomPhase === "lobby") return;
+    const animations = Array.from(document.querySelectorAll<HTMLElement>(
+      ".roomGameScreen .playingCard.cardMotionDealer, .roomLocalPlayer .playingCard.cardMotionPlayer",
+    )).flatMap((element) => element.getAnimations());
+    if (!animations.length) return;
+    const startedAt = performance.now();
+    void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+      const finishedAt = performance.now();
+      performance.measure("blackjack:room-card-animation", { start: startedAt, end: finishedAt });
+      recordRoomPerformance("cardAnimation", finishedAt - startedAt);
+    });
+  }, [activeRoomVersion, activeRoomPhase]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -725,9 +832,10 @@ export default function BlackjackGame() {
         setRoomPasscode(invitePasscode.slice(0, 32));
       }
 
-      const cachedBalance = Number(window.localStorage.getItem(WALLET_KEY));
+      const cachedBalanceValue = window.localStorage.getItem(WALLET_KEY);
+      const cachedBalance = Number(cachedBalanceValue);
       const startingBalance =
-        Number.isFinite(cachedBalance) && cachedBalance >= LOWEST_TABLE_MINIMUM
+        cachedBalanceValue !== null && isValidTokenBalance(cachedBalance)
           ? cachedBalance
           : RESET_BALANCE;
       let storedAchievements: number[] = [];
@@ -765,10 +873,8 @@ export default function BlackjackGame() {
   useEffect(() => {
     if (!walletLoaded || gameBankroll === undefined) return;
     const timer = window.setTimeout(() => {
-      const savedBalance =
-        gameBankroll >= LOWEST_TABLE_MINIMUM ? gameBankroll : RESET_BALANCE;
-      setWallet(savedBalance);
-      window.localStorage.setItem(WALLET_KEY, String(savedBalance));
+      setWallet(gameBankroll);
+      window.localStorage.setItem(WALLET_KEY, String(gameBankroll));
     }, 0);
     return () => window.clearTimeout(timer);
   }, [gameBankroll, walletLoaded]);
@@ -799,26 +905,54 @@ export default function BlackjackGame() {
   useEffect(() => {
     if (!activeRoomCode) return;
     let cancelled = false;
+    let fallbackInterval: number | undefined;
+    const events = new EventSource(`/api/rooms/${activeRoomCode}/events`);
+
+    const acceptRoom = (nextRoom: RoomView | null) => {
+      if (cancelled) return;
+      if (!nextRoom || !nextRoom.players.some((player) => player.id === activeRoomSeatId)) {
+        events.close();
+        setRoomSession(null);
+        setHomeNotice(nextRoom ? "You left the room or the host removed your seat." : "This room has closed.");
+        return;
+      }
+      applyRoomUpdate(nextRoom);
+    };
 
     async function refreshRoom() {
       try {
         const response = await fetch(`/api/rooms/${activeRoomCode}`, { cache: "no-store" });
+        if (response.status === 404) return acceptRoom(null);
         if (!response.ok || cancelled) return;
         const data = (await response.json()) as { room: RoomView };
-        setRoomSession((current) =>
-          current?.code === data.room.code ? { ...current, room: data.room } : current,
-        );
+        acceptRoom(data.room);
       } catch {
-        // A later poll can recover from a transient connection failure.
+        // The event stream reconnects; the fallback check can recover separately.
       }
     }
 
-    const interval = window.setInterval(() => void refreshRoom(), 1800);
+    events.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as { room: RoomView | null };
+        acceptRoom(data.room);
+      } catch {
+        // Ignore a malformed event; the next version replaces it.
+      }
+    };
+    events.onopen = () => {
+      if (fallbackInterval) window.clearInterval(fallbackInterval);
+      fallbackInterval = undefined;
+    };
+    events.onerror = () => {
+      if (!fallbackInterval) fallbackInterval = window.setInterval(() => void refreshRoom(), 4000);
+      void refreshRoom();
+    };
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      events.close();
+      if (fallbackInterval) window.clearInterval(fallbackInterval);
     };
-  }, [activeRoomCode]);
+  }, [activeRoomCode, activeRoomSeatId, applyRoomUpdate]);
 
   const unlockAudio = useCallback(() => {
     if (!soundEnabledRef.current || typeof window === "undefined") return null;
@@ -1150,7 +1284,7 @@ export default function BlackjackGame() {
       nextRoom.dealer[1],
     );
     const shuffled = nextRoom.shoeRemaining > previousRoom.shoeRemaining;
-    const soundSpacing = DEAL_DELAY;
+    const soundSpacing = ROOM_DEAL_DELAY;
     const dealSoundStart = holeRevealed ? 160 : 0;
 
     if (shuffled) playCardSound("shuffle");
@@ -1289,25 +1423,30 @@ export default function BlackjackGame() {
     game &&
       activeHand &&
       game.phase === "playing" &&
-      activeHand.cards.length === 2 &&
-      game.bankroll >= activeHand.bet,
+      (game.mode === "doubleDownMadness"
+        ? activeHand.cards.length >= 1 && scoreHand(activeHand.cards).total < 21
+        : activeHand.cards.length === 2) &&
+      (game.mode === "freeBet" && isFreeDouble(activeHand.cards) ||
+        game.bankroll >= (activeHand.bet || activeHand.freeStake || game.currentBet)),
   );
   const splitPairAvailable = Boolean(
     game &&
       activeHand &&
       game.phase === "playing" &&
       game.hands.length < MAX_SPLIT_HANDS &&
-      canSplit(activeHand.cards),
+      game.mode !== "doubleDownMadness" && canSplit(activeHand.cards),
   );
   const splitAvailable = Boolean(
-    splitPairAvailable && game && activeHand && game.bankroll >= activeHand.bet,
+    splitPairAvailable && game && activeHand &&
+      (game.mode === "freeBet" && isFreeSplit(activeHand.cards) ||
+        game.bankroll >= (activeHand.bet || activeHand.freeStake || game.currentBet)),
   );
   const surrenderAvailable = Boolean(
     game &&
       activeHand &&
       game.phase === "playing" &&
       activeHand.cards.length === 2 &&
-      !activeHand.fromSplit,
+      !activeHand.fromSplit && game.mode !== "doubleDownMadness",
   );
   const strategyAdvice = useMemo(() => {
     if (
@@ -1317,9 +1456,9 @@ export default function BlackjackGame() {
       !game.dealer[0]
     ) return null;
     return getBasicStrategyAdvice(activeHand.cards, game.dealer[0], {
-      allowDouble: activeHand.cards.length === 2,
-      allowSplit: game.hands.length < MAX_SPLIT_HANDS && canSplit(activeHand.cards),
-      allowSurrender: activeHand.cards.length === 2 && !activeHand.fromSplit,
+      allowDouble: game.mode === "classic" && activeHand.cards.length === 2,
+      allowSplit: game.mode === "classic" && game.hands.length < MAX_SPLIT_HANDS && canSplit(activeHand.cards),
+      allowSurrender: game.mode === "classic" && activeHand.cards.length === 2 && !activeHand.fromSplit,
     });
   }, [activeHand, game]);
   const shoePercent = useMemo(
@@ -1334,6 +1473,26 @@ export default function BlackjackGame() {
   const roomPlayer = roomSession?.room.players.find(
     (player) => player.id === roomSession.seatId,
   );
+  const roomBankroll = roomPlayer?.bankroll;
+  useEffect(() => {
+    if (!walletLoaded || roomBankroll === undefined) return;
+    setWallet(roomBankroll);
+    window.localStorage.setItem(WALLET_KEY, String(roomBankroll));
+  }, [roomBankroll, walletLoaded]);
+  const visibleRoomPlayer = roomPlayer && pendingRoomAction?.action === "bet" &&
+    roomSession?.room.phase === "betting" && pendingRoomAction.round === roomSession.room.round && !roomPlayer.bet
+    ? {
+        ...roomPlayer,
+        bet: pendingRoomAction.amount ?? 0,
+        bankroll: roomPlayer.bankroll - (pendingRoomAction.amount ?? 0) - sideBetStake(pendingRoomAction.sideBets ?? EMPTY_SIDE_BETS),
+      }
+    : roomPlayer;
+  const selectedDonationPlayer = roomSession?.room.players.find((player) => player.id === donationTarget);
+  const selectDonationPlayer = useCallback((playerId: string) => {
+    setRoomError("");
+    setDonationAmount("");
+    setDonationTarget(playerId);
+  }, []);
   const roomOpponents = roomSession
     ? roomSession.room.players.filter((player) => player.id !== roomSession.seatId)
     : [];
@@ -1353,13 +1512,42 @@ export default function BlackjackGame() {
     : game
       ? "solo"
       : "wallet";
-  const completedTableBustKey = roomPlayer && roomSession?.room.phase === "settled"
+  const completedTableBustKey = roomPlayer && roomSession && (
+    roomSession.room.phase === "settled" ||
+    (roomSession.room.phase === "betting" && roomPlayer.bet === 0 &&
+      roomPlayer.bankroll < roomSession.room.table.minimum)
+  )
     ? `room:${roomSession.code}:${roomPlayer.id}:${roomSession.room.round}`
     : game?.phase === "settled"
       ? `solo:${game.round}`
       : null;
   const completedTableBalance = roomPlayer?.bankroll ?? game?.bankroll ?? wallet;
   const completedTableMinimum = roomSession?.room.table.minimum ?? selectedTable.minimum;
+
+  useEffect(() => {
+    const isRoomRound = roomSession?.room.phase === "settled";
+    const isSoloRound = !roomSession && game?.phase === "settled";
+    if (!isRoomRound && !isSoloRound) return;
+
+    const hands = isRoomRound ? roomPlayer?.hands : game?.hands;
+    if (!hands?.length) return;
+    const roundKey = isRoomRound
+      ? `room:${roomSession!.code}:${roomSession!.seatId}:${roomSession!.room.round}`
+      : `solo:${analyticsSessionIdRef.current}:${game!.round}`;
+    if (trackedRoundsRef.current.has(roundKey)) return;
+    trackedRoundsRef.current.add(roundKey);
+
+    const totals = roundTokenTotals(
+      hands,
+      isRoomRound ? roomPlayer?.sideBetResults ?? [] : game?.roundSideBetOutcomes ?? [],
+    );
+    sendGAEvent("event", "blackjack_round_settled", {
+      ...totals,
+      game_mode: isRoomRound ? "classic" : game!.mode,
+      play_context: isRoomRound ? "multiplayer" : "solo",
+      token_unit: "practice_tokens",
+    });
+  }, [game, roomPlayer, roomSession]);
 
   useEffect(() => {
     if (!walletLoaded || !achievementsLoaded) return;
@@ -1455,16 +1643,19 @@ export default function BlackjackGame() {
     }
     playCardSound("entry");
     setHomeNotice("");
-    const startingBalance =
-      wallet >= LOWEST_TABLE_MINIMUM ? wallet : RESET_BALANCE;
+    const startingBalance = wallet;
+    const freshShoe = createBurnedShoe(DECK_COUNT);
+    analyticsSessionIdRef.current += 1;
     setGame({
       bankroll: startingBalance,
       startingBankroll: startingBalance,
       currentBet: selectedTable.minimum,
       sideBets: { ...EMPTY_SIDE_BETS },
-      seenCardCounts: emptySeenCardCounts(),
+      roundSideBetOutcomes: [],
+      seenCardCounts: addSeenCards(emptySeenCardCounts(), [freshShoe.burnedCard]),
       dealerHoleSeen: false,
-      shoe: createShoe(DECK_COUNT),
+      shoe: freshShoe.shoe,
+      burnedCard: freshShoe.burnedCard,
       cutPoint: createCutPoint(),
       dealer: [],
       hands: [],
@@ -1474,6 +1665,7 @@ export default function BlackjackGame() {
       message: "Place your bet",
       tone: "neutral",
       round: 1,
+      mode: selectedMode,
     });
   }
 
@@ -1531,7 +1723,8 @@ export default function BlackjackGame() {
     }
 
     const emergencyShuffle = current.shoe.length < handCount * 2 + 2;
-    const shoe = emergencyShuffle ? createShoe(DECK_COUNT) : [...current.shoe];
+    const freshShoe = emergencyShuffle ? createBurnedShoe(DECK_COUNT) : null;
+    const shoe = freshShoe ? freshShoe.shoe : [...current.shoe];
     const playerCards: CardType[][] = Array.from({ length: handCount }, () => []);
     const dealerCards: CardType[] = [];
     const dealSteps: Array<{
@@ -1541,7 +1734,7 @@ export default function BlackjackGame() {
       handIndex?: number;
     }> = [];
 
-    for (let pass = 0; pass < 2; pass += 1) {
+    for (let pass = 0; pass < (current.mode === "doubleDownMadness" ? 1 : 2); pass += 1) {
       for (let handIndex = 0; handIndex < handCount; handIndex += 1) {
         const card = draw(shoe);
         playerCards[handIndex].push(card);
@@ -1555,21 +1748,33 @@ export default function BlackjackGame() {
         visible: pass === 0,
       });
     }
+    if (current.mode === "doubleDownMadness") {
+      const holeCard = draw(shoe);
+      dealerCards.push(holeCard);
+      dealSteps.push({ recipient: "dealer", card: holeCard, visible: false });
+    }
 
     const bet = current.currentBet;
     const openingStake = totalOpeningStake(bet, current.sideBets, handCount);
     const sideBetResults = playerCards.map((cards) =>
-      settleSideBets(cards, dealerCards[0], current.sideBets),
+      current.mode === "doubleDownMadness"
+        ? { payout: 0, outcomes: [] as SideBetOutcome[] }
+        : settleSideBets(cards, dealerCards[0], current.sideBets),
     );
     const sideBetPayout = sideBetResults.reduce((total, result) => total + result.payout, 0);
+    const roundSideBetOutcomes = sideBetResults.flatMap((result) => result.outcomes);
     const dealRoundNumber = current.round;
 
     setGame({
       ...current,
       bankroll: current.bankroll - openingStake,
+      roundSideBetOutcomes,
       dealer: [],
       shoe,
-      seenCardCounts: emergencyShuffle ? emptySeenCardCounts() : current.seenCardCounts,
+      burnedCard: freshShoe?.burnedCard ?? current.burnedCard,
+      seenCardCounts: freshShoe
+        ? addSeenCards(emptySeenCardCounts(), [freshShoe.burnedCard])
+        : current.seenCardCounts,
       dealerHoleSeen: false,
       hands: Array.from({ length: handCount }, () => ({
         cards: [],
@@ -1638,6 +1843,28 @@ export default function BlackjackGame() {
 
     setGame((latest) => {
       if (!latest || latest.phase !== "dealing" || latest.round !== dealRoundNumber) return latest;
+
+      if (latest.mode === "doubleDownMadness") {
+        if (dealerNatural) {
+          return {
+            ...latest,
+            hands: playerCards.map((cards) => ({ cards, bet, status: "lost" as const, result: "DEALER BLACKJACK" })),
+            dealer: dealerCards,
+            dealerHoleSeen: true,
+            seenCardCounts: addSeenCards(latest.seenCardCounts, [dealerCards[1]]),
+            phase: "settled",
+            message: "Dealer blackjack",
+            tone: "loss",
+          };
+        }
+        return {
+          ...latest,
+          hands: playerCards.map((cards) => ({ cards, bet, status: "active" as const })),
+          dealer: dealerCards,
+          phase: "playing",
+          message: "One card to start — hit or double",
+        };
+      }
 
       if (dealerNatural) {
         const naturalPushPayout = naturalCount * bet;
@@ -1709,24 +1936,28 @@ export default function BlackjackGame() {
           : hand,
       );
       const total = scoreHand(hands[current.activeHand].cards).total;
+      const singleAceDraw = current.mode === "doubleDownMadness" && current.hands[current.activeHand].cards.length === 1 && current.hands[current.activeHand].cards[0].rank === "A";
+      const madnessNatural = current.mode === "doubleDownMadness" &&
+        hands[current.activeHand].cards.length === 2 && isBlackjack(hands[current.activeHand].cards);
       const next = {
         ...current,
         shoe,
         seenCardCounts: addSeenCards(current.seenCardCounts, [dealtCard]),
         hands: hands.map((hand, index) =>
-          index === current.activeHand && total >= 21
+          index === current.activeHand && (total >= 21 || madnessNatural || singleAceDraw)
             ? {
                 ...hand,
-                status: total > 21 ? ("busted" as const) : ("standing" as const),
-                result: total > 21 ? "BUST" : hand.result,
+                status: total > 21 ? ("busted" as const) : madnessNatural ? ("won" as const) : ("standing" as const),
+                result: total > 21 ? "BUST" : madnessNatural ? "BLACKJACK" : hand.result,
               }
             : hand,
         ),
-        message: total > 21 ? "That hand busts" : total === 21 ? "Twenty-one" : "Your move",
+        bankroll: current.bankroll + (madnessNatural ? current.hands[current.activeHand].bet * 2.5 : 0),
+        message: total > 21 ? bustPhrase() : madnessNatural ? "Blackjack pays 3 to 2" : singleAceDraw ? "Single ace draws once" : total === 21 ? "Twenty-one" : "Your move",
         tone: total > 21 ? ("loss" as const) : ("neutral" as const),
       };
 
-      return total >= 21 ? advanceOrSettle(next) : next;
+      return total >= 21 || madnessNatural || singleAceDraw ? advanceOrSettle(next) : next;
     });
   }
 
@@ -1745,7 +1976,14 @@ export default function BlackjackGame() {
     setGame((current) => {
       if (!current || current.phase !== "playing") return current;
       const hand = current.hands[current.activeHand];
-      if (hand.cards.length !== 2 || current.bankroll < hand.bet) return current;
+      const freeDouble = current.mode === "freeBet" && isFreeDouble(hand.cards);
+      const paidDoubleStake = hand.bet || hand.freeStake || current.currentBet;
+      if (
+        (current.mode === "doubleDownMadness"
+          ? hand.cards.length < 1 || scoreHand(hand.cards).total >= 21
+          : hand.cards.length !== 2) ||
+        (!freeDouble && current.bankroll < paidDoubleStake)
+      ) return current;
 
       const shoe = [...current.shoe];
       const dealtCard = draw(shoe);
@@ -1753,22 +1991,26 @@ export default function BlackjackGame() {
         if (index !== current.activeHand) return candidate;
         const cards = [...candidate.cards, dealtCard];
         const busted = scoreHand(cards).total > 21;
+        const madnessNatural = current.mode === "doubleDownMadness" && cards.length === 2 && isBlackjack(cards);
+        const singleAceDraw = current.mode === "doubleDownMadness" && candidate.cards.length === 1 && candidate.cards[0].rank === "A";
         return {
           ...candidate,
           cards,
-          bet: candidate.bet * 2,
-          status: busted ? ("busted" as const) : ("standing" as const),
-          result: busted ? "BUST" : candidate.result,
+          bet: freeDouble ? candidate.bet : candidate.bet + paidDoubleStake,
+          freeStake: (candidate.freeStake ?? 0) + (freeDouble ? candidate.bet || candidate.freeStake || current.currentBet : 0),
+          status: busted ? ("busted" as const) : madnessNatural ? ("won" as const) : current.mode === "doubleDownMadness" && !singleAceDraw ? ("active" as const) : ("standing" as const),
+          result: busted ? "BUST" : madnessNatural ? "BLACKJACK" : candidate.result,
         };
       });
-
-      return advanceOrSettle({
+      const next = {
         ...current,
-        bankroll: current.bankroll - hand.bet,
+        bankroll: current.bankroll - (freeDouble ? 0 : paidDoubleStake) + (hands[current.activeHand].result === "BLACKJACK" ? hands[current.activeHand].bet * 2.5 : 0),
         shoe,
         seenCardCounts: addSeenCards(current.seenCardCounts, [dealtCard]),
         hands,
-      });
+        message: hands[current.activeHand].result === "BUST" ? bustPhrase() : "Your move",
+      };
+      return hands[current.activeHand].status === "active" ? next : advanceOrSettle(next);
     });
   }
 
@@ -1781,15 +2023,18 @@ export default function BlackjackGame() {
       if (!current || current.phase !== "playing") return current;
       const original = current.hands[current.activeHand];
       if (
+        current.mode === "doubleDownMadness" ||
         current.hands.length >= MAX_SPLIT_HANDS ||
         !canSplit(original.cards)
       ) {
         return current;
       }
-      if (current.bankroll < original.bet) {
+      const freeSplit = current.mode === "freeBet" && isFreeSplit(original.cards);
+      const splitStake = original.bet || original.freeStake || current.currentBet;
+      if (!freeSplit && current.bankroll < splitStake) {
         return {
           ...current,
-          message: `A split needs ${tokenAmount(original.bet)} more tokens`,
+          message: `A split needs ${tokenAmount(splitStake)} more tokens`,
           tone: "neutral",
         };
       }
@@ -1800,9 +2045,10 @@ export default function BlackjackGame() {
       const firstCards = [original.cards[0], firstDealtCard];
       const secondCards = [original.cards[1], secondDealtCard];
       const splitAces = original.cards[0].rank === "A";
-      const splitHands: PlayerHand[] = [firstCards, secondCards].map((cards) => ({
+      const splitHands: PlayerHand[] = [firstCards, secondCards].map((cards, index) => ({
         cards,
-        bet: original.bet,
+        bet: index === 1 ? (freeSplit ? 0 : splitStake) : original.bet,
+        freeStake: index === 1 && freeSplit ? splitStake : original.freeStake,
         fromSplit: true,
         status:
           splitAces || scoreHand(cards).total === 21
@@ -1820,7 +2066,7 @@ export default function BlackjackGame() {
         firstActiveSplit === -1 ? splitIndex : splitIndex + firstActiveSplit;
       const next = {
         ...current,
-        bankroll: current.bankroll - original.bet,
+        bankroll: current.bankroll - (freeSplit ? 0 : splitStake),
         shoe,
         seenCardCounts: addSeenCards(current.seenCardCounts, [firstDealtCard, secondDealtCard]),
         hands,
@@ -1840,7 +2086,7 @@ export default function BlackjackGame() {
     setGame((current) => {
       if (!current || current.phase !== "playing") return current;
       const hand = current.hands[current.activeHand];
-      if (!hand || hand.cards.length !== 2 || hand.fromSplit) return current;
+      if (!hand || current.mode === "doubleDownMadness" || hand.cards.length !== 2 || hand.fromSplit) return current;
       const hands = current.hands.map((candidate, index) =>
         index === current.activeHand
           ? { ...candidate, status: "surrendered" as const, result: "SURRENDER" }
@@ -1874,6 +2120,7 @@ export default function BlackjackGame() {
           return current;
         }
         const nextHandCount = soloHandCountRef.current;
+        const freshShoe = createBurnedShoe(DECK_COUNT);
         const affordableBet = Math.floor(
           current.bankroll / nextHandCount / selectedTable.minimum,
         ) * selectedTable.minimum;
@@ -1882,9 +2129,10 @@ export default function BlackjackGame() {
           currentBet: Math.min(current.currentBet, affordableBet),
           startingHandCount: nextHandCount,
           sideBets: { ...EMPTY_SIDE_BETS },
-          seenCardCounts: emptySeenCardCounts(),
+          seenCardCounts: addSeenCards(emptySeenCardCounts(), [freshShoe.burnedCard]),
           dealerHoleSeen: false,
-          shoe: createShoe(DECK_COUNT),
+          shoe: freshShoe.shoe,
+          burnedCard: freshShoe.burnedCard,
           cutPoint: createCutPoint(),
           phase: "betting",
           message:
@@ -1938,6 +2186,7 @@ export default function BlackjackGame() {
     setGame((current) => {
       if (!current) return current;
       const needsFreshShoe = current.shoe.length <= current.cutPoint;
+      const freshShoe = needsFreshShoe ? createBurnedShoe(DECK_COUNT) : null;
       if (needsFreshShoe) playCardSound("shuffle");
       return {
         ...current,
@@ -1945,11 +2194,12 @@ export default function BlackjackGame() {
         startingBankroll: RESET_BALANCE,
         currentBet: selectedTable.minimum,
         sideBets: { ...EMPTY_SIDE_BETS },
-        seenCardCounts: needsFreshShoe
-          ? emptySeenCardCounts()
+        seenCardCounts: freshShoe
+          ? addSeenCards(emptySeenCardCounts(), [freshShoe.burnedCard])
           : current.seenCardCounts,
         dealerHoleSeen: false,
-        shoe: needsFreshShoe ? createShoe(DECK_COUNT) : current.shoe,
+        shoe: freshShoe?.shoe ?? current.shoe,
+        burnedCard: freshShoe?.burnedCard ?? current.burnedCard,
         cutPoint: needsFreshShoe ? createCutPoint() : current.cutPoint,
         dealer: [],
         hands: [],
@@ -1990,7 +2240,7 @@ export default function BlackjackGame() {
 
   async function submitRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!roomMode || roomBusy) return;
+    if (!roomMode || roomBusy || !walletLoaded) return;
     unlockAudio();
     setRoomBusy(true);
     setRoomError("");
@@ -2006,6 +2256,7 @@ export default function BlackjackGame() {
         body: JSON.stringify({
           name: roomName,
           passcode: roomPasscode,
+          startingBankroll: wallet,
         }),
       });
       const data = (await response.json()) as {
@@ -2028,6 +2279,7 @@ export default function BlackjackGame() {
         room: data.room,
       });
       setRoomWager(data.room.table.minimum);
+      setRoomSideBets({ ...EMPTY_SIDE_BETS });
       setRoomMode(null);
       if (roomMode === "join") setRoomPasscode("");
     } catch (error) {
@@ -2056,7 +2308,7 @@ export default function BlackjackGame() {
       });
       const data = (await response.json()) as { room?: RoomView; error?: string };
       if (!response.ok || !data.room) throw new Error(data.error ?? "Could not update your seat");
-      setRoomSession((current) => (current ? { ...current, room: data.room! } : current));
+      applyRoomUpdate(data.room);
     } catch (error) {
       setRoomError(error instanceof Error ? error.message : "Could not update your seat");
     } finally {
@@ -2076,7 +2328,7 @@ export default function BlackjackGame() {
       });
       const data = (await response.json()) as { room?: RoomView; error?: string };
       if (!response.ok || !data.room) throw new Error(data.error ?? "Could not start table");
-      setRoomSession((current) => (current ? { ...current, room: data.room! } : current));
+      applyRoomUpdate(data.room);
       setRoomWager(data.room.table.minimum);
     } catch (error) {
       setRoomError(error instanceof Error ? error.message : "Could not start table");
@@ -2086,27 +2338,57 @@ export default function BlackjackGame() {
   }
 
   async function sendRoomAction(
-    action: "bet" | "hit" | "stand" | "double" | "split" | "surrender" | "next-round",
+    action: "bet" | "hit" | "stand" | "double" | "split" | "surrender" | "next-round" | "donate" | "leave" | "kick",
     amount?: number,
+    targetId?: string,
   ) {
     if (!roomSession || roomBusy) return;
     unlockAudio();
     setRoomBusy(true);
     setRoomError("");
+    if (["bet", "hit", "stand", "double", "split", "surrender"].includes(action)) {
+      setPendingRoomAction({
+        action: action as PendingRoomAction["action"],
+        round: roomSession.room.round,
+        amount,
+        sideBets: action === "bet" ? { ...roomSideBets } : undefined,
+      });
+    }
+    const startedAt = performance.now();
     try {
       const response = await fetch(`/api/rooms/${roomSession.code}/action`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ playerId: roomSession.playerId, action, amount }),
+        body: JSON.stringify({
+          playerId: roomSession.playerId,
+          action,
+          amount,
+          targetId,
+          sideBets: action === "bet" ? roomSideBets : undefined,
+        }),
       });
+      const respondedAt = performance.now();
+      performance.measure(`blackjack:room-action:${action}`, { start: startedAt, end: respondedAt });
+      recordRoomPerformance(`action:${action}`, respondedAt - startedAt);
       const data = (await response.json()) as { room?: RoomView; error?: string };
-      if (!response.ok || !data.room) throw new Error(data.error ?? "Could not update table");
-      setRoomSession((current) => (current ? { ...current, room: data.room! } : current));
-      if (action === "next-round") setRoomWager(data.room.table.minimum);
+      if (!response.ok || (!data.room && action !== "leave")) throw new Error(data.error ?? "Could not update table");
+      if (action === "leave") {
+        setRoomSession(null);
+        setDonationTarget(null);
+        setHomeNotice("You left the room.");
+        return;
+      }
+      applyRoomUpdate(data.room!);
+      if (action === "next-round") {
+        setRoomWager(data.room!.table.minimum);
+        setRoomSideBets({ ...EMPTY_SIDE_BETS });
+      }
+      if (action === "donate" || action === "kick") setDonationTarget(null);
     } catch (error) {
       setRoomError(error instanceof Error ? error.message : "Could not update table");
       playCardSound("lose");
     } finally {
+      setPendingRoomAction(null);
       setRoomBusy(false);
     }
   }
@@ -2171,7 +2453,7 @@ export default function BlackjackGame() {
           className="brand"
           type="button"
           onClick={() => {
-            if (roomSession) setRoomSession(null);
+            if (roomSession) void sendRoomAction("leave");
             else if (game) setGame(null);
           }}
           aria-label={game || roomSession ? "Leave table" : "Ashwin's Blackjack home"}
@@ -2197,7 +2479,7 @@ export default function BlackjackGame() {
               <span className="miniChip">◎</span>
               <span>
                 <small>Balance</small>
-                <strong>{tokenAmount(roomPlayer?.bankroll ?? game?.bankroll ?? wallet)}</strong>
+                <strong>{tokenAmount(visibleRoomPlayer?.bankroll ?? game?.bankroll ?? wallet)}</strong>
               </span>
             </button>
           ) : null}
@@ -2259,6 +2541,9 @@ export default function BlackjackGame() {
                         <strong>{player.name}{isCurrent ? " (you)" : ""}</strong>
                         <small>{isHost ? "Host" : player.ready ? "Ready" : "Seated"}</small>
                         <i className={player.ready ? "ready" : ""} />
+                        {isRoomHost && !isCurrent ? (
+                          <button className="roomKickButton" type="button" disabled={roomBusy} onClick={() => void sendRoomAction("kick", undefined, player.id)}>Remove</button>
+                        ) : null}
                       </>
                     ) : (
                       <>
@@ -2273,7 +2558,7 @@ export default function BlackjackGame() {
             </div>
 
             <div className="roomLobbyActions">
-              <button className="textControl" type="button" onClick={() => setRoomSession(null)}>
+              <button className="textControl" type="button" onClick={() => void sendRoomAction("leave")}>
                 Leave room
               </button>
               <button className="takeSeatButton" type="button" onClick={toggleRoomReady} disabled={roomBusy}>
@@ -2306,8 +2591,10 @@ export default function BlackjackGame() {
           <div className="roomGameTopline">
             <span>Room {roomSession.code}</span>
             <strong>{roomSession.room.table.name} · Round {roomSession.room.round}</strong>
-            <span>{roomSession.room.shoeRemaining} cards</span>
+            <span>{DECK_COUNT}-deck shoe · {roomSession.room.shoeRemaining} cards</span>
+            <button type="button" className="roomExitButton" onClick={() => void sendRoomAction("leave")}>Leave</button>
           </div>
+          <div className="burnNotice">Burned after shuffle: <span>{roomSession.room.burnedCard.rank}{SUIT_MARKS[roomSession.room.burnedCard.suit]}</span> · {roomSession.room.shoeRemaining} cards remain</div>
 
           <div className="roomDealerArea">
             <div className="zoneLabel">
@@ -2320,7 +2607,7 @@ export default function BlackjackGame() {
               {roomSession.room.dealer.length ? roomSession.room.dealer.map((card, index) => (
                 <PlayingCard
                   card={card ?? undefined}
-                  delayMs={roomSession.room.phase === "settled" ? Math.max(0, index - 1) * DEAL_DELAY : index * DEAL_DELAY}
+                  delayMs={roomSession.room.phase === "settled" ? 0 : index < 2 ? index * ROOM_DEAL_DELAY : 0}
                   hidden={!card}
                   key={card?.id ?? `hole-${index}`}
                   motion="dealer"
@@ -2331,7 +2618,11 @@ export default function BlackjackGame() {
             </div>
           </div>
 
-          <div className="roomGameMessage">{roomSession.room.message}</div>
+          <div className="roomGameMessage">{pendingRoomAction && pendingRoomAction.round === roomSession.room.round
+            ? pendingRoomAction.action === "bet"
+              ? `Placing ${tokenAmount(pendingRoomAction.amount ?? 0)} tokens…`
+              : `${pendingRoomAction.action[0].toUpperCase()}${pendingRoomAction.action.slice(1)} selected…`
+            : roomSession.room.message}</div>
 
           <div className="roomPlayersStage">
             <div className="roomOpponentColumn roomOpponentColumnLeft" aria-label="Players to your left">
@@ -2343,6 +2634,8 @@ export default function BlackjackGame() {
                   onCardInteract={playCardClick}
                   player={player}
                   tableMinimum={roomSession.room.table.minimum}
+                  roomPhase={roomSession.room.phase}
+                  onSelect={selectDonationPlayer}
                 />
               ))}
             </div>
@@ -2351,8 +2644,9 @@ export default function BlackjackGame() {
                 isActive={roomPlayer.id === roomSession.room.currentPlayerId}
                 isLocal
                 onCardInteract={playCardClick}
-                player={roomPlayer}
+                player={visibleRoomPlayer ?? roomPlayer}
                 tableMinimum={roomSession.room.table.minimum}
+                roomPhase={roomSession.room.phase}
               />
             ) : null}
             <div className="roomOpponentColumn roomOpponentColumnRight" aria-label="Players to your right">
@@ -2364,6 +2658,8 @@ export default function BlackjackGame() {
                   onCardInteract={playCardClick}
                   player={player}
                   tableMinimum={roomSession.room.table.minimum}
+                  roomPhase={roomSession.room.phase}
+                  onSelect={selectDonationPlayer}
                 />
               ))}
             </div>
@@ -2373,7 +2669,7 @@ export default function BlackjackGame() {
             {roomSession.room.phase === "betting" ? (
               !roomPlayerCanBet ? (
                 <strong>You are out of tokens for this table. You can still watch{isRoomHost ? " and open the next round" : ""}.</strong>
-              ) : roomPlayer?.bet ? (
+              ) : roomPlayer?.bet || pendingRoomAction?.action === "bet" ? (
                 <strong>Bet placed — waiting for the table</strong>
               ) : (
                 <>
@@ -2400,25 +2696,37 @@ export default function BlackjackGame() {
                       </button>
                     ))}
                   </div>
+                  <div className="roomSideBetPicker" aria-label="Multiplayer side bets">
+                    {(Object.keys(SIDE_BET_LABELS) as SideBetKey[]).map((key) => (
+                      <button type="button" key={key} className={roomSideBets[key] ? "selected" : ""}
+                        onClick={() => {
+                          const choices = [0, roomSession.room.table.minimum / 2, roomSession.room.table.minimum];
+                          const next = choices[(choices.indexOf(roomSideBets[key]) + 1) % choices.length];
+                          setRoomSideBets((bets) => ({ ...bets, [key]: next }));
+                        }}>
+                        {SIDE_BET_LABELS[key].short} <b>{roomSideBets[key] || "—"}</b>
+                      </button>
+                    ))}
+                  </div>
                   <div className="roomWagerSummary" aria-live="polite">
                     <ChipPile amount={roomWager} denominations={roomSession.room.table.chips} />
                     <span>
                       <small>Current bet</small>
-                      <strong>{tokenAmount(roomWager)}</strong>
+                      <strong>{tokenAmount(roomWager)} + {tokenAmount(sideBetStake(roomSideBets))} side</strong>
                     </span>
                   </div>
                   <button
                     className="dealButton"
                     type="button"
                     onClick={() => sendRoomAction("bet", roomWager)}
-                    disabled={roomBusy || roomWager < roomSession.room.table.minimum || roomWager > (roomPlayer?.bankroll ?? 0)}
+                    disabled={roomBusy || roomWager < roomSession.room.table.minimum || roomWager + sideBetStake(roomSideBets) > (roomPlayer?.bankroll ?? 0)}
                   >
                     Place bet
                   </button>
                 </>
               )
             ) : roomSession.room.phase === "playing" ? (
-              isRoomTurn ? (
+              pendingRoomAction ? <strong>{pendingRoomAction.action} selected — confirming with the table…</strong> : isRoomTurn ? (
                 <div className="playControls roomPlayControls">
                   <button type="button" onClick={() => sendRoomAction("stand")}><small>S</small><span>Stand</span></button>
                   <button className="primaryAction" type="button" onClick={() => sendRoomAction("hit")}><small>H</small><span>Hit</span></button>
@@ -2447,8 +2755,28 @@ export default function BlackjackGame() {
 
           <div className="buyInCard">
             <div className="buyInHeading">
-              <span>Choose table stakes</span>
-              <small>Balance: {tokenAmount(wallet)}</small>
+              <span>Choose table stakes<small>Balance: {tokenAmount(wallet)}</small></span>
+              <details className="gameModeDropdown" ref={modeDropdownRef}>
+                <summary aria-label={`Game mode: ${GAME_MODES.find((mode) => mode.id === selectedMode)?.name}. Change game mode`}>
+                  <i className="gameModeIcon"><ModeIcon mode={selectedMode} /></i>
+                  <span><small>Game mode</small><strong>{GAME_MODES.find((mode) => mode.id === selectedMode)?.name}</strong></span>
+                  <b aria-hidden="true">⌄</b>
+                </summary>
+                <div className="gameModeDropdownMenu" role="group" aria-label="Choose game mode">
+                  {GAME_MODES.map((mode) => (
+                    <button className={selectedMode === mode.id ? "selected" : ""} type="button" key={mode.id}
+                      aria-label={`${mode.name}: ${mode.description}`}
+                      aria-pressed={selectedMode === mode.id} onClick={() => {
+                        setSelectedMode(mode.id);
+                        if (modeDropdownRef.current) modeDropdownRef.current.open = false;
+                      }}>
+                      <i className="gameModeIcon"><ModeIcon mode={mode.id} /></i>
+                      <span><strong>{mode.name}</strong><small>{mode.description}</small></span>
+                      {selectedMode === mode.id ? <b aria-hidden="true">✓</b> : null}
+                    </button>
+                  ))}
+                </div>
+              </details>
             </div>
             <div className="stakeTableOptions">
               {TABLES.map((table) => (
@@ -2518,6 +2846,7 @@ export default function BlackjackGame() {
         <section className="tableScreen">
           <div className="tableRail" aria-hidden="true" />
           <div className="tableMeta">
+            <div className="burnNotice">{GAME_MODES.find((mode) => mode.id === game.mode)?.name} · Burned after shuffle: <span>{game.burnedCard.rank}{SUIT_MARKS[game.burnedCard.suit]}</span> · {game.shoe.length} cards remain</div>
             <div className="shoeTracker">
               <div className="shoeLabel">
                 <DeckIcon />
@@ -2659,7 +2988,7 @@ export default function BlackjackGame() {
                     {game.startingHandCount} {game.startingHandCount === 1 ? "hand" : "hands"} · {tokenAmount(totalOpeningStake(game.currentBet, game.sideBets, game.startingHandCount))} total
                   </small>
                 </div>
-                <div className="sideBetRow" aria-label="Side bets per hand">
+                {game.mode !== "doubleDownMadness" ? <div className="sideBetRow" aria-label="Side bets per hand">
                   {(Object.keys(SIDE_BET_LABELS) as SideBetKey[]).map((key) => (
                     <button
                       className={game.sideBets[key] ? "selected" : ""}
@@ -2672,7 +3001,7 @@ export default function BlackjackGame() {
                       <strong>{game.sideBets[key] || "—"}</strong>
                     </button>
                   ))}
-                </div>
+                </div> : <small className="madnessNote">Opening side bets are unavailable with the one-card deal.</small>}
               </div>
             )}
           </div>
@@ -2723,7 +3052,7 @@ export default function BlackjackGame() {
                 </button>
               </div>
             ) : game.phase === "playing" ? (
-              <div className="playControls">
+              <div className={`playControls${game.mode === "doubleDownMadness" ? " madnessControls" : ""}`}>
                 <button className="secondaryAction" type="button" onClick={stand}>
                   <small>S</small><span>Stand</span>
                 </button>
@@ -2731,24 +3060,28 @@ export default function BlackjackGame() {
                   <small>H</small><span>Hit</span>
                 </button>
                 <button className="secondaryAction" type="button" onClick={doubleDown} disabled={!canDouble}>
-                  <small>2×</small><span>Double</span>
+                  <small>2×</small><span>{game.mode === "freeBet" && activeHand && isFreeDouble(activeHand.cards)
+                    ? "Free double"
+                    : game.mode === "doubleDownMadness" && activeHand?.cards.length === 1 && activeHand.cards[0].rank === "A"
+                      ? "Double · 1 card"
+                      : "Double"}</span>
                 </button>
-                <button
+                {game.mode !== "doubleDownMadness" ? <><button
                   className="secondaryAction"
                   type="button"
                   onClick={splitHand}
                   disabled={!splitPairAvailable}
                   title={
                     splitPairAvailable && !splitAvailable && activeHand
-                      ? `Requires ${tokenAmount(activeHand.bet)} tokens for the matching wager`
+                      ? `Requires ${tokenAmount(activeHand.bet || activeHand.freeStake || game.currentBet)} tokens for the matching wager`
                       : undefined
                   }
                 >
-                  <small>Ⅱ</small><span>Split</span>
+                  <small>Ⅱ</small><span>{game.mode === "freeBet" && activeHand && isFreeSplit(activeHand.cards) ? "Free split" : "Split"}</span>
                 </button>
                 <button className="secondaryAction" type="button" onClick={surrender} disabled={!surrenderAvailable}>
                   <small>½</small><span>Surrender</span>
-                </button>
+                </button></> : null}
               </div>
             ) : game.phase === "dealing" || game.phase === "dealerTurn" || game.phase === "shuffling" ? (
               <div className="pacingControls" aria-live="polite">
@@ -2910,15 +3243,37 @@ export default function BlackjackGame() {
                 required
               />
             </label>
-            {roomMode === "create" ? (
-              <div className="roomStackNote">
-                Starting stack <strong>{tokenAmount(RESET_BALANCE)} tokens</strong>
-              </div>
-            ) : null}
+            <div className="roomStackNote">
+              Your starting stack <strong>{walletLoaded ? `${tokenAmount(wallet)} tokens` : "Loading…"}</strong>
+            </div>
             {roomError ? <div className="roomError" role="alert">{roomError}</div> : null}
-            <button className="takeSeatButton" type="submit" disabled={roomBusy}>
+            <button className="takeSeatButton" type="submit" disabled={roomBusy || !walletLoaded}>
               {roomBusy ? "Connecting…" : roomMode === "create" ? "Create room" : "Join room"}
             </button>
+          </form>
+        </div>
+      ) : null}
+
+      {donationTarget && selectedDonationPlayer && roomSession ? (
+        <div className="modalBackdrop" role="presentation" onMouseDown={() => setDonationTarget(null)}>
+          <form className="settingsSheet donationSheet" role="dialog" aria-modal="true" aria-labelledby="donation-title"
+            onMouseDown={(event) => event.stopPropagation()}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void sendRoomAction("donate", Number(donationAmount), donationTarget);
+            }}>
+            <button className="closeButton" type="button" onClick={() => setDonationTarget(null)} aria-label="Close transfer">×</button>
+            <span className="sheetEyebrow">Multiplayer tokens</span>
+            <h2 id="donation-title">Send tokens to {selectedDonationPlayer.name}</h2>
+            <p>Your available balance is {tokenAmount(roomPlayer?.bankroll ?? 0)} tokens. Transfers are immediate.</p>
+            <label htmlFor="donation-amount">Tokens to send</label>
+            <input id="donation-amount" type="number" inputMode="numeric" min="1" step="1"
+              max={roomPlayer?.bankroll ?? 0} value={donationAmount}
+              onChange={(event) => setDonationAmount(event.target.value)} autoFocus required />
+            {roomError ? <p className="roomErrorText" role="alert">{roomError}</p> : null}
+            <button className="takeSeatButton" type="submit" disabled={roomBusy || !Number.isSafeInteger(Number(donationAmount)) || Number(donationAmount) < 1 || Number(donationAmount) > (roomPlayer?.bankroll ?? 0)}>Send tokens</button>
+            {isRoomHost ? <button className="roomRemoveButton" type="button" disabled={roomBusy}
+              onClick={() => void sendRoomAction("kick", undefined, donationTarget)}>Remove {selectedDonationPlayer.name} from room</button> : null}
           </form>
         </div>
       ) : null}
@@ -2928,22 +3283,23 @@ export default function BlackjackGame() {
           <section className="rulesSheet" role="dialog" aria-modal="true" aria-labelledby="rules-title" onMouseDown={(event) => event.stopPropagation()}>
             <button className="closeButton" type="button" onClick={() => setRulesOpen(false)} aria-label="Close rules">×</button>
             <span className="sheetEyebrow">Table rules</span>
-            <h2 id="rules-title">Blackjack, kept classic.</h2>
+            <h2 id="rules-title">Blackjack table rules</h2>
             <p>Get closer to 21 than the dealer without going over. Face cards count as 10; aces count as 1 or 11.</p>
             <dl>
               <div><dt>Blackjack</dt><dd>Pays 3:2</dd></div>
-              <div><dt>Dealer</dt><dd>Stands on all 17s</dd></div>
-              <div><dt>Shoe</dt><dd>{DECK_COUNT} decks; cut card 55–90% through</dd></div>
+              <div><dt>Dealer</dt><dd>Hits soft 17</dd></div>
+              <div><dt>Shoe</dt><dd>{DECK_COUNT} decks; one card burned after every shuffle</dd></div>
               <div><dt>Double</dt><dd>Any first two cards</dd></div>
               <div><dt>Split</dt><dd>Equal values; all 10-value cards match</dd></div>
               <div><dt>Surrender</dt><dd>Late; half the main bet returned</dd></div>
               <div><dt>Insurance</dt><dd>Not offered</dd></div>
             </dl>
+            <p>Free Bet: free doubles on two-card hard 9–11, free splits except ten-value pairs, and dealer 22 pushes standing hands. Double Down Madness: one player card to start; hit or redouble after drawing, with no splits or surrender. Dealer 22 pushes standing hands. Opening side bets are available in Classic and Free Bet.</p>
             <div className="sidePaytables">
               <h3>Side bet paytables</h3>
               <div>
                 <strong>Perfect Pairs</strong>
-                <span>Mixed 5:1 · Colored 10:1 · Perfect 25:1</span>
+                <span>Mixed 6:1 · Colored 12:1 · Perfect 25:1</span>
               </div>
               <div>
                 <strong>21 + 3</strong>
@@ -2952,6 +3308,10 @@ export default function BlackjackGame() {
               <div>
                 <strong>Match the Dealer</strong>
                 <span>Rank match 4:1 · Suited match 11:1. Each opening card can match.</span>
+              </div>
+              <div>
+                <strong>Top 3</strong>
+                <span>Three of a kind 90:1 · Straight flush 180:1 · Suited trips grand slam 270:1</span>
               </div>
             </div>
             <p className="practiceNote">Practice tokens have no cash value.</p>

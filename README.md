@@ -1,6 +1,8 @@
 # Ashwin's Blackjack
 
-A mobile-first, six-deck blackjack game built with Next.js. The app uses practice tokens only and supports persistent device-local balances, four table-stakes tiers, one to three starting hands with the same wager per hand, hit, stand, double, up to five total hands after splits (including mixed 10/J/Q/K pairs), late surrender, and Perfect Pairs, 21+3, and Match the Dealer side bets.
+A mobile-first, six-deck blackjack game built with Next.js. It uses practice tokens only. Solo play offers Classic, Free Bet, and Double Down Madness; private multiplayer rooms use Classic rules. Fresh shoes burn and reveal one card before dealing. Both solo and multiplayer offer Perfect Pairs, 21+3, Match the Dealer, and Top 3 side bets. Multiplayer hosts can remove players, players can leave, and seated players can send each other tokens. Room players bring their saved token balance, and room balance changes carry back into solo play on the same browser.
+
+The Perfect Pairs, 21+3, and Top 3 payouts follow the [Nevada Gaming Control Board All Bets Blackjack rules](https://prod.gaming.nv.gov/siteassets/content/divisions/enforcement/rules-of-play/All_Bets_Blackjack_Live_Rules_of_Play.pdf). Match the Dealer uses the six-deck 4:1 and 11:1 schedule. Free Bet is based on the [South Dakota approved rule](https://sdlegislature.gov/api/Rules/Rule/20%3A18%3A15%3A30.14.html). Double Down Madness is based on the [Nevada approved rules](https://www.gaming.nv.gov/siteassets/content/divisions/technology/rules-of-play/double-down-madness---version-2.pdf); this game does not offer insurance or its special side wagers.
 
 ## Quick start
 
@@ -55,6 +57,10 @@ docker run --rm -p 8080:8080 -e PORT=8080 blackjack-web:latest
 
 Google Analytics 4 is enabled with the site's `G-RMTSSXD4LY` measurement ID. No runtime environment variable is required. After deployment, open the site and check the Google Analytics Realtime report to confirm events are arriving.
 
+Each completed solo or multiplayer round sends one `blackjack_round_settled` event for the local player. Its numeric `tokens_won` parameter sums profit from winning hands and side bets; `tokens_lost` sums stakes lost on losing hands and side bets. Pushes add zero. Donated tokens and bankroll resets are excluded. These are practice tokens, not money. The event also includes `game_mode` and `play_context`.
+
+To see totals across players in GA4, go to **Admin → Data display → Custom definitions → Custom metrics** and create two event-scoped metrics with **Standard** unit: **Tokens won** with event parameter `tokens_won`, and **Tokens lost** with event parameter `tokens_lost`. Add both metrics to an Exploration with event name `blackjack_round_settled`; the totals can be exported from that report. Google says custom metrics may take 24–48 hours to appear in reports. Tracking is client-side, so visitors who block Analytics or leave before settlement are not counted.
+
 ## Deploy to Google Cloud Run
 
 Set these values for your Google Cloud project and Artifact Registry repository:
@@ -103,13 +109,14 @@ The Artifact Registry repository must exist before the first run. The workflow i
 
 ## Architecture
 
-The token balance is persisted in browser storage, while an unfinished solo round resets when the page reloads. The same container includes the server-authoritative multiplayer layer:
+The token balance is persisted in browser storage, while an unfinished solo round resets when the page reloads. Creating or joining a room imports that browser's current balance; later authoritative room balance updates are saved to the same wallet. The same container includes the server-authoritative multiplayer layer:
 
 - `POST /api/rooms` creates a protected five-seat room and a server-owned six-deck shoe.
 - `POST /api/rooms/:code/join` validates the passcode and assigns a private player session token.
 - `GET /api/rooms/:code` returns safe room state without passcodes, session tokens, or shoe order.
 - `POST /api/rooms/:code/ready` updates a player seat using its private session token.
 - `POST /api/rooms/:code/start` lets a ready host open the shared betting round.
-- `POST /api/rooms/:code/action` handles authoritative bets, hit, stand, double, split, surrender, settlement, and next-round actions.
+- `POST /api/rooms/:code/action` handles authoritative bets, hit, stand, double, split, surrender, donations, seat removal, leaving, settlement, and next-round actions.
+- `GET /api/rooms/:code/events` streams room versions over Server-Sent Events so clients see actions immediately.
 
-The private-room UI polls safe room state and keeps dealer hole cards and shoe order server-side. The development room store is process-local, expires rooms after six hours, and is suitable for testing on one server instance. Before scaling Cloud Run above one instance, replace the store behind `lib/server/rooms.ts` with Firestore or another shared transactional store. Cloud Run instances are stateless and in-memory rooms are not shared across instances.
+The private-room UI applies newer streamed room versions and falls back to polling if the stream disconnects. It keeps dealer hole cards and shoe order server-side. The development room store is process-local, expires rooms after six hours, and is suitable for testing on one server instance. Before scaling Cloud Run above one instance, replace the store behind `lib/server/rooms.ts` with Firestore or another shared transactional store and a shared broadcast mechanism. Cloud Run instances are stateless and in-memory rooms are not shared across instances.

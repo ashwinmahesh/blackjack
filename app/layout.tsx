@@ -5,9 +5,18 @@ import "./globals.css";
 const GOOGLE_ANALYTICS_ID = "G-RMTSSXD4LY";
 
 export const metadata: Metadata = {
-  title: "Ashwin's Blackjack",
+  title: "Play Free Blackjack Online | Classic, Free Bet & Multiplayer",
   applicationName: "Ashwin's Blackjack",
-  description: "Ad-free six-deck blackjack, built for every screen. Play without distractions.",
+  description: "Play free six-deck blackjack with friends or solo. Try Classic, Free Bet, and Double Down Madness with side bets, practice tokens, and no ads.",
+  keywords: ["free blackjack online", "multiplayer blackjack", "free bet blackjack", "double down madness", "blackjack side bets", "practice blackjack"],
+  robots: { index: true, follow: true },
+  openGraph: {
+    type: "website",
+    title: "Ashwin's Blackjack | Free Blackjack Online",
+    description: "Ad-free blackjack with private multiplayer rooms, side bets, and three game modes.",
+    siteName: "Ashwin's Blackjack",
+  },
+  twitter: { card: "summary", title: "Ashwin's Blackjack", description: "Play free blackjack online with friends or solo." },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
