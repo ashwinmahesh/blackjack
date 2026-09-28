@@ -73,6 +73,7 @@ type GameState = {
   round: number;
   mode: GameMode;
   burnedCard: CardType;
+  shoeSerial: number;
 };
 
 type RoomPlayerView = {
@@ -105,6 +106,7 @@ type RoomView = {
   round: number;
   shoeRemaining: number;
   burnedCard: CardType;
+  shoeSerial: number;
   version: number;
   updatedAt: number;
 };
@@ -739,6 +741,7 @@ export default function BlackjackGame() {
     id: number;
     outcomes: SideBetOutcome[];
   } | null>(null);
+  const [burnReveal, setBurnReveal] = useState<{ key: string; rank: CardType["rank"]; suit: CardType["suit"] } | null>(null);
   const gameRef = useRef<GameState | null>(null);
   const soundEnabledRef = useRef(true);
   const soloHandCountRef = useRef<SoloHandCount>(1);
@@ -750,6 +753,7 @@ export default function BlackjackGame() {
   const previousAchievementSourceRef = useRef("");
   const achievementQueueRef = useRef<number[]>([]);
   const lastTableBustRoundRef = useRef("");
+  const lastBurnRevealKeyRef = useRef("");
   const analyticsSessionIdRef = useRef(0);
   const trackedRoundsRef = useRef(new Set<string>());
   const activeRoomCode = roomSession?.code;
@@ -759,6 +763,15 @@ export default function BlackjackGame() {
   const screenKey = roomSession
     ? roomSession.room.phase === "lobby" ? "lobby" : "roomGame"
     : game ? "solo" : "home";
+  const burnShoeKey = roomSession
+    ? `${roomSession.code}:${roomSession.room.shoeSerial}`
+    : game ? `solo:${analyticsSessionIdRef.current}:${game.shoeSerial}` : "";
+  const burnRank = roomSession?.room.burnedCard.rank ?? game?.burnedCard.rank;
+  const burnSuit = roomSession?.room.burnedCard.suit ?? game?.burnedCard.suit;
+  const canRevealBurn = roomSession
+    ? roomSession.room.phase === "betting"
+    : game?.phase === "betting";
+  const burnRevealActive = burnReveal?.key === burnShoeKey;
   const gameBankroll = game?.bankroll;
   const selectedTable = TABLES.find((table) => table.id === selectedTableId) ?? TABLES[0];
   const sideBetValues = [0, selectedTable.minimum / 2, selectedTable.minimum, selectedTable.minimum * 2];
@@ -779,6 +792,19 @@ export default function BlackjackGame() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [screenKey]);
+
+  useEffect(() => {
+    if (!burnShoeKey || !burnRank || !burnSuit || !canRevealBurn || lastBurnRevealKeyRef.current === burnShoeKey) return;
+    lastBurnRevealKeyRef.current = burnShoeKey;
+    const start = window.setTimeout(() => setBurnReveal({ key: burnShoeKey, rank: burnRank, suit: burnSuit }), 0);
+    return () => window.clearTimeout(start);
+  }, [burnShoeKey, burnRank, burnSuit, canRevealBurn]);
+
+  useEffect(() => {
+    if (!burnReveal) return;
+    const end = window.setTimeout(() => setBurnReveal((current) => current?.key === burnReveal.key ? null : current), 2300);
+    return () => window.clearTimeout(end);
+  }, [burnReveal]);
 
   const applyRoomUpdate = useCallback((nextRoom: RoomView) => {
     roomVersionReceivedAtRef.current.set(nextRoom.version, performance.now());
@@ -1656,6 +1682,7 @@ export default function BlackjackGame() {
       dealerHoleSeen: false,
       shoe: freshShoe.shoe,
       burnedCard: freshShoe.burnedCard,
+      shoeSerial: 1,
       cutPoint: createCutPoint(),
       dealer: [],
       hands: [],
@@ -1708,6 +1735,7 @@ export default function BlackjackGame() {
     const current = game;
     const handCount = current?.startingHandCount ?? 1;
     if (
+      burnRevealActive ||
       !current ||
       current.phase !== "betting" ||
       current.currentBet < selectedTable.minimum ||
@@ -1772,6 +1800,7 @@ export default function BlackjackGame() {
       dealer: [],
       shoe,
       burnedCard: freshShoe?.burnedCard ?? current.burnedCard,
+      shoeSerial: current.shoeSerial + (freshShoe ? 1 : 0),
       seenCardCounts: freshShoe
         ? addSeenCards(emptySeenCardCounts(), [freshShoe.burnedCard])
         : current.seenCardCounts,
@@ -2133,6 +2162,7 @@ export default function BlackjackGame() {
           dealerHoleSeen: false,
           shoe: freshShoe.shoe,
           burnedCard: freshShoe.burnedCard,
+          shoeSerial: current.shoeSerial + 1,
           cutPoint: createCutPoint(),
           phase: "betting",
           message:
@@ -2200,6 +2230,7 @@ export default function BlackjackGame() {
         dealerHoleSeen: false,
         shoe: freshShoe?.shoe ?? current.shoe,
         burnedCard: freshShoe?.burnedCard ?? current.burnedCard,
+        shoeSerial: current.shoeSerial + (freshShoe ? 1 : 0),
         cutPoint: needsFreshShoe ? createCutPoint() : current.cutPoint,
         dealer: [],
         hands: [],
@@ -2342,7 +2373,7 @@ export default function BlackjackGame() {
     amount?: number,
     targetId?: string,
   ) {
-    if (!roomSession || roomBusy) return;
+    if (!roomSession || roomBusy || (action === "bet" && burnRevealActive)) return;
     unlockAudio();
     setRoomBusy(true);
     setRoomError("");
@@ -2594,7 +2625,6 @@ export default function BlackjackGame() {
             <span>{DECK_COUNT}-deck shoe · {roomSession.room.shoeRemaining} cards</span>
             <button type="button" className="roomExitButton" onClick={() => void sendRoomAction("leave")}>Leave</button>
           </div>
-          <div className="burnNotice">Burned after shuffle: <span>{roomSession.room.burnedCard.rank}{SUIT_MARKS[roomSession.room.burnedCard.suit]}</span> · {roomSession.room.shoeRemaining} cards remain</div>
 
           <div className="roomDealerArea">
             <div className="zoneLabel">
@@ -2719,7 +2749,7 @@ export default function BlackjackGame() {
                     className="dealButton"
                     type="button"
                     onClick={() => sendRoomAction("bet", roomWager)}
-                    disabled={roomBusy || roomWager < roomSession.room.table.minimum || roomWager + sideBetStake(roomSideBets) > (roomPlayer?.bankroll ?? 0)}
+                    disabled={roomBusy || burnRevealActive || roomWager < roomSession.room.table.minimum || roomWager + sideBetStake(roomSideBets) > (roomPlayer?.bankroll ?? 0)}
                   >
                     Place bet
                   </button>
@@ -2747,10 +2777,10 @@ export default function BlackjackGame() {
         <section className="welcomeScreen">
           <div className="welcomeEyebrow"><span /> Private {DECK_COUNT}-deck table</div>
           <div className="welcomeMark" aria-hidden="true">♠</div>
-          <h1>Play your hand.</h1>
+          <h1>Play free blackjack online.</h1>
           <p className="welcomeTagline">Ad-free blackjack. Play without distractions</p>
           <p className="welcomeCopy">
-            Your token balance stays on this device. Choose a table, then take a seat.
+            Play Classic, Free Bet, or Double Down Madness solo, or join friends in a private room. Your practice-token balance stays on this device.
           </p>
 
           <div className="buyInCard">
@@ -2831,6 +2861,12 @@ export default function BlackjackGame() {
               <span>→</span><strong>Join with code</strong>
             </button>
           </div>
+          <nav className="homeGuideLinks" aria-label="Blackjack rules and payout guides">
+            <a href="/rules">Classic rules</a>
+            <a href="/free-bet">Free Bet</a>
+            <a href="/double-down-madness">Double Down Madness</a>
+            <a href="/side-bets">Side bet payouts</a>
+          </nav>
           <a
             className="githubHomeLink"
             href="https://github.com/ashwinmahesh/blackjack"
@@ -2846,7 +2882,6 @@ export default function BlackjackGame() {
         <section className="tableScreen">
           <div className="tableRail" aria-hidden="true" />
           <div className="tableMeta">
-            <div className="burnNotice">{GAME_MODES.find((mode) => mode.id === game.mode)?.name} · Burned after shuffle: <span>{game.burnedCard.rank}{SUIT_MARKS[game.burnedCard.suit]}</span> · {game.shoe.length} cards remain</div>
             <div className="shoeTracker">
               <div className="shoeLabel">
                 <DeckIcon />
@@ -3041,6 +3076,7 @@ export default function BlackjackGame() {
                   onClick={tableBusted ? resetTableBankroll : dealRound}
                   disabled={
                     !tableBusted && (
+                      burnRevealActive ||
                       game.currentBet < selectedTable.minimum ||
                       totalOpeningStake(game.currentBet, game.sideBets, game.startingHandCount) > game.bankroll
                     )
@@ -3117,6 +3153,17 @@ export default function BlackjackGame() {
           </div>
         </section>
       )}
+
+      {burnReveal && (screenKey === "solo" || screenKey === "roomGame") ? (
+        <div className="burnReveal" role="status" aria-label={`Burned card: ${burnReveal.rank} of ${burnReveal.suit}`}>
+          <div className={`burnRevealCard playingCard cardFace ${burnReveal.suit === "hearts" || burnReveal.suit === "diamonds" ? "redCard" : "blackCard"}`}>
+            <span className="cardCorner"><strong>{burnReveal.rank}</strong><span>{SUIT_MARKS[burnReveal.suit]}</span></span>
+            <span className="cardSuit">{SUIT_MARKS[burnReveal.suit]}</span>
+            <span className="cardCorner bottomCorner"><strong>{burnReveal.rank}</strong><span>{SUIT_MARKS[burnReveal.suit]}</span></span>
+          </div>
+          <span className="burnRevealLabel">Burned card</span>
+        </div>
+      ) : null}
 
       {settingsOpen && !roomSession ? (
         <div className="modalBackdrop" role="presentation" onMouseDown={() => setSettingsOpen(false)}>

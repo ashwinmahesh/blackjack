@@ -61,6 +61,12 @@ Each completed solo or multiplayer round sends one `blackjack_round_settled` eve
 
 To see totals across players in GA4, go to **Admin → Data display → Custom definitions → Custom metrics** and create two event-scoped metrics with **Standard** unit: **Tokens won** with event parameter `tokens_won`, and **Tokens lost** with event parameter `tokens_lost`. Add both metrics to an Exploration with event name `blackjack_round_settled`; the totals can be exported from that report. Google says custom metrics may take 24–48 hours to appear in reports. Tracking is client-side, so visitors who block Analytics or leave before settlement are not counted.
 
+## Search indexing
+
+The canonical production origin is [https://ashwinblackjack.com](https://ashwinblackjack.com). The app emits a canonical URL on the home page and each public guide, plus a [sitemap](https://ashwinblackjack.com/sitemap.xml) and [robots file](https://ashwinblackjack.com/robots.txt). The home page links to crawlable rules and side-bet guides. API routes are omitted from the sitemap and disallowed in `robots.txt`.
+
+After deploying, add the domain property in Google Search Console, verify ownership through DNS, and submit `https://ashwinblackjack.com/sitemap.xml`. Inspect the home page and guide URLs there after indexing. Keep any `www` host redirected to the canonical apex domain in the domain or hosting configuration.
+
 ## Deploy to Google Cloud Run
 
 Set these values for your Google Cloud project and Artifact Registry repository:

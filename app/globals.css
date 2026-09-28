@@ -178,10 +178,47 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomEntryActions button:hover { border-color: rgba(212,174,98,.48); background: rgba(212,174,98,.08); }
 .roomEntryActions button span { color: var(--gold); font-size: 17px; }
 .roomEntryActions button strong { font-size: 12px; }
+.homeGuideLinks { margin-top: 20px; display: flex; justify-content: center; flex-wrap: wrap; gap: 7px 16px; }
+.homeGuideLinks a { color: #aab9ad; font-size: 11px; text-decoration: underline; text-decoration-color: rgba(212,174,98,.42); text-underline-offset: 4px; }
+.homeGuideLinks a:hover, .homeGuideLinks a:focus-visible { color: #f0d18f; }
 .githubHomeLink { width: 42px; height: 42px; margin-top: 18px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.1); border-radius: 50%; color: #87998f; background: rgba(5,22,16,.55); transition: color .2s ease, border-color .2s ease, background .2s ease, transform .2s ease; }
 .githubHomeLink:hover { color: #f0d18f; border-color: rgba(212,174,98,.45); background: rgba(212,174,98,.08); transform: translateY(-2px); }
 .githubHomeLink:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
 .githubHomeLink svg { width: 22px; height: 22px; fill: currentColor; }
+
+.guideShell { min-height: 100dvh; background: radial-gradient(circle at 50% 0, rgba(28,93,66,.28), transparent 40%), #06130f; }
+.guideTopBar { min-height: 74px; padding: 12px clamp(18px, 5vw, 60px); display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); background: rgba(4,16,12,.8); }
+.guideBrand { color: #f0d18f; font: 500 20px Georgia, serif; text-decoration: none; }
+.guideBrand span { color: var(--ink); }
+.guidePlay { padding: 10px 16px; border: 1px solid rgba(212,174,98,.48); border-radius: 9px; color: #f0d18f; font-size: 12px; font-weight: 700; text-decoration: none; }
+.guidePlay:hover, .guideNav a:hover { border-color: #f0d18f; background: rgba(212,174,98,.1); }
+.guideMain { width: min(850px, calc(100% - 36px)); margin: 0 auto; padding: clamp(42px, 7vw, 82px) 0 76px; }
+.guideHero { padding-bottom: 26px; border-bottom: 1px solid var(--line); }
+.guideEyebrow { margin: 0 0 13px; color: var(--gold); font-size: 10px; font-weight: 700; letter-spacing: .23em; text-transform: uppercase; }
+.guideHero h1 { max-width: 760px; margin: 0; font: 400 clamp(42px, 7vw, 70px)/1.05 Georgia, serif; letter-spacing: -.035em; }
+.guideIntro { max-width: 720px; margin: 19px 0 0; color: #bac9bf; font-size: clamp(16px, 2vw, 19px); line-height: 1.65; }
+.guideContent section { padding: 25px 0; border-bottom: 1px solid var(--line); }
+.guideContent h2, .guideNav h2 { margin: 0 0 12px; color: #efd49d; font: 400 28px/1.2 Georgia, serif; }
+.guideContent p { margin: 0 0 12px; color: #bac9bf; font-size: 15px; line-height: 1.8; }
+.guideContent p:last-child { margin-bottom: 0; }
+.guideDefinitionList { margin: 0 0 18px; }
+.guideDefinitionList div { display: grid; grid-template-columns: 140px 1fr; gap: 15px; padding: 12px 0; border-bottom: 1px solid rgba(227,204,147,.09); }
+.guideDefinitionList dt { color: #f0d18f; font-weight: 700; }
+.guideDefinitionList dd { margin: 0; color: #bac9bf; line-height: 1.55; }
+.guidePaytable { width: 100%; margin-top: 14px; border-collapse: collapse; color: #dbe5dd; font-size: 14px; }
+.guidePaytable th, .guidePaytable td { padding: 11px 13px; border-bottom: 1px solid rgba(227,204,147,.11); text-align: left; }
+.guidePaytable th { color: #96ab9d; font-size: 10px; letter-spacing: .13em; text-transform: uppercase; }
+.guidePaytable th:last-child, .guidePaytable td:last-child { width: 100px; color: #f0d18f; text-align: right; font-weight: 700; }
+.guidePaytable tbody tr:nth-child(odd) { background: rgba(255,255,255,.025); }
+.guideNav { padding-top: 36px; }
+.guideNav > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.guideNav a { min-height: 54px; padding: 15px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--line); border-radius: 10px; color: #e6e8dc; text-decoration: none; }
+.guideNav a span { color: var(--gold); }
+.guideFooter { padding: 20px 18px; border-top: 1px solid var(--line); color: #899d90; font-size: 12px; text-align: center; }
+@media (max-width: 600px) {
+  .guideDefinitionList div { grid-template-columns: 1fr; gap: 4px; }
+  .guideNav > div { grid-template-columns: 1fr; }
+}
 
 .roomLobbyScreen { min-height: calc(100dvh - 74px); display: grid; place-items: center; padding: 34px 18px; position: relative; z-index: 2; }
 .roomLobbyCard { width: min(760px, 100%); padding: 30px; border: 1px solid rgba(212,174,98,.2); border-radius: 22px; background: linear-gradient(145deg, rgba(15,49,37,.96), rgba(7,28,21,.97)); box-shadow: 0 28px 90px rgba(0,0,0,.36); text-align: center; }
@@ -263,10 +300,16 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomSendButton { flex-shrink: 0; border: 1px solid rgba(212,174,98,.38); border-radius: 7px; background: rgba(212,174,98,.08); color: #f2d895; padding: 5px 7px; font-size: 9px; cursor: pointer; }
 .roomSideBetWin { margin-top: 5px; color: #f3d88e; font-size: 9px; text-align: center; }
 .roomKickButton { position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); border: 0; background: none; color: #e9a59e; font-size: 9px; cursor: pointer; }
-.roomGameScreen { grid-template-rows: auto auto minmax(126px, .55fr) auto minmax(270px, 1.45fr) auto; }
 .roomExitButton { border: 1px solid rgba(255,255,255,.2); border-radius: 7px; background: rgba(0,0,0,.15); color: #e9d7bd; padding: 5px 8px; cursor: pointer; }
-.burnNotice { justify-self: center; color: #a7bcb0; font-size: 11px; text-align: center; }
-.burnNotice span { color: #f0d391; font-weight: 800; }
+.burnReveal { position: fixed; inset: 0; z-index: 95; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; pointer-events: none; background: radial-gradient(circle at 50% 50%, rgba(4,20,14,.56), transparent 46%); }
+.burnRevealCard.playingCard { width: clamp(92px, 18vw, 122px); cursor: default; animation: burnCardSlide 2.3s cubic-bezier(.2,.72,.24,1) both; }
+.burnRevealCard .cardCorner strong { font-size: 23px; }
+.burnRevealCard .cardCorner span { font-size: 14px; }
+.burnRevealCard .cardSuit { font-size: 58px; }
+.burnRevealLabel { padding: 7px 12px; border: 1px solid rgba(212,174,98,.38); border-radius: 999px; background: rgba(5,27,20,.84); color: #f0d18f; font-size: 10px; font-weight: 800; letter-spacing: .2em; text-transform: uppercase; animation: burnLabelFade 2.3s both; }
+@keyframes burnCardSlide { 0% { opacity: 0; transform: translate(58vw, -22px) rotate(18deg) scale(.88); } 19% { opacity: 1; transform: translate(0, 0) rotate(-4deg) scale(1.06); } 28%, 68% { opacity: 1; transform: translate(0, 0) rotate(0) scale(1); } 100% { opacity: 0; transform: translate(-60vw, 28px) rotate(-20deg) scale(.86); } }
+@keyframes burnLabelFade { 0%, 15% { opacity: 0; } 28%, 68% { opacity: 1; } 90%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .burnRevealCard.playingCard, .burnRevealLabel { animation: none; } }
 .roomGameControls { flex-wrap: wrap; height: auto; }
 .roomSideBetPicker { width: 100%; display: flex; justify-content: center; gap: 5px; flex-wrap: wrap; }
 .roomSideBetPicker button { border: 1px solid rgba(255,255,255,.12); border-radius: 7px; background: rgba(255,255,255,.04); color: #b3c4b9; padding: 5px 7px; font-size: 10px; cursor: pointer; }

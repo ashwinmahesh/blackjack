@@ -72,6 +72,7 @@ type StoredRoom = {
   players: StoredPlayer[];
   shoe: Card[];
   burnedCard: Card;
+  shoeSerial: number;
   cutPoint: number;
   dealer: Card[];
   currentPlayerId: string | null;
@@ -389,6 +390,7 @@ export function createRoom(input: {
     players: [host],
     shoe: freshShoe.shoe,
     burnedCard: freshShoe.burnedCard,
+    shoeSerial: 1,
     cutPoint: createCutPoint(),
     dealer: [],
     currentPlayerId: null,
@@ -519,6 +521,7 @@ export function roomAction(
       const freshShoe = createBurnedShoe(DECK_COUNT);
       room.shoe = freshShoe.shoe;
       room.burnedCard = freshShoe.burnedCard;
+      room.shoeSerial += 1;
       room.cutPoint = createCutPoint();
     }
     const playableCount = room.players.filter((candidate) => candidate.bankroll >= room.table.minimum).length;
@@ -528,7 +531,7 @@ export function roomAction(
     room.round += 1;
     room.message = playableCount
       ? shuffled
-        ? `Fresh ${DECK_COUNT}-deck shoe shuffled. Burned ${room.burnedCard.rank} of ${room.burnedCard.suit}. Place bets — minimum ${room.table.minimum}`
+        ? `Fresh ${DECK_COUNT}-deck shoe shuffled. Place bets — minimum ${room.table.minimum}`
         : `Place bets — minimum ${room.table.minimum}`
       : "No players have enough tokens for the next round";
     for (const candidate of room.players) {
