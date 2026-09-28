@@ -24,6 +24,12 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Blackjack",
+    statusBarStyle: "black",
   },
 };
 
@@ -41,6 +47,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head><meta name="apple-mobile-web-app-capable" content="yes" /></head>
       <body>
         <script
           type="application/ld+json"
