@@ -19,6 +19,8 @@ import {
   dealerShouldHit,
   EMPTY_SIDE_BETS,
   getBasicStrategyAdvice,
+  getDoubleDownMadnessStrategyAdvice,
+  getFreeBetStrategyAdvice,
   isBlackjack,
   isFreeDouble,
   isFreeSplit,
@@ -160,7 +162,7 @@ const CARD_COUNT_RANKS: CardType["rank"][] = [
 ];
 
 const DEAL_DELAY = 330;
-const ROOM_DEAL_DELAY = 190;
+const ROOM_DEAL_DELAY = DEAL_DELAY;
 const cardBounceAnimations = new WeakMap<HTMLDivElement, Animation>();
 
 function pause(milliseconds: number) {
@@ -513,7 +515,7 @@ function RoomPlayerSeatView({
                     card={card}
                     delayMs={handIndex === 0 && player.hands.length === 1 && dealIndex >= 0 &&
                       (roomMode === "doubleDownMadness" ? hand.cards.length === 1 : hand.cards.length === 2)
-                      ? (roomMode === "doubleDownMadness" ? dealIndex : cardIndex * (dealPlayerCount + 1) + dealIndex) * ROOM_DEAL_DELAY
+                      ? (1 + (roomMode === "doubleDownMadness" ? dealIndex : cardIndex * (dealPlayerCount + 1) + dealIndex)) * ROOM_DEAL_DELAY
                       : 0}
                     key={card.id}
                     motion={isLocal ? "player" : undefined}
@@ -667,10 +669,12 @@ function ChipPile({ amount, denominations }: { amount: number; denominations: re
 
 function StrategyAdvisor({
   advice,
+  mode,
   open,
   onToggle,
 }: {
   advice: BasicStrategyAdvice | null;
+  mode: GameMode;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -693,7 +697,7 @@ function StrategyAdvisor({
             <>
               <header>
                 <span>
-                  <small>Basic strategy says</small>
+                  <small>{mode === "classic" ? "Basic strategy says" : "Mode strategy says"}</small>
                   <strong>{advice.move}</strong>
                 </span>
                 <b>{advice.handLabel}</b>
@@ -704,7 +708,11 @@ function StrategyAdvisor({
                   If {advice.move.toLowerCase()} is unavailable: {advice.fallback}
                 </span>
               ) : null}
-              <footer>6 decks · H17 · DAS · late surrender · no card count</footer>
+              <footer>{mode === "doubleDownMadness"
+                ? "6 decks · H17 · repeat doubles · dealer 22 pushes"
+                : mode === "freeBet"
+                  ? "6 decks · H17 · free bets · dealer 22 pushes"
+                  : "6 decks · H17 · DAS · late surrender · no card count"}</footer>
             </>
           ) : (
             <p className="strategyWaiting">Deal a hand to see the recommended move.</p>
@@ -750,6 +758,7 @@ export default function BlackjackGame() {
     id: number;
     balance: number;
     minimum: number;
+    phrase: string | null;
   } | null>(null);
   const [sideBetCelebration, setSideBetCelebration] = useState<{
     id: number;
@@ -1326,7 +1335,8 @@ export default function BlackjackGame() {
     );
     const shuffled = nextRoom.shoeRemaining > previousRoom.shoeRemaining;
     const soundSpacing = ROOM_DEAL_DELAY;
-    const dealSoundStart = holeRevealed ? 160 : 0;
+    const openingDeal = previousRoom.phase === "betting" && nextRoom.phase === "playing";
+    const dealSoundStart = openingDeal ? ROOM_DEAL_DELAY : holeRevealed ? 160 : 0;
 
     if (shuffled) playCardSound("shuffle");
     if (holeRevealed) playCardSound("flip");
@@ -1389,7 +1399,7 @@ export default function BlackjackGame() {
       setAchievementBanner(null);
       setUnlockedAchievements([]);
     }
-    setTableBustNotice({ id: Date.now(), balance, minimum });
+    setTableBustNotice({ id: Date.now(), balance, minimum, phrase: resetAchievements ? bustPhrase() : null });
     playCardSound("tableBust");
   }, [playCardSound]);
 
@@ -1512,12 +1522,23 @@ export default function BlackjackGame() {
       !activeHand ||
       !game.dealer[0]
     ) return null;
+    if (game.mode === "doubleDownMadness") {
+      return getDoubleDownMadnessStrategyAdvice(activeHand.cards, game.dealer[0], canDouble);
+    }
+    if (game.mode === "freeBet") {
+      return getFreeBetStrategyAdvice(activeHand.cards, game.dealer[0], {
+        allowDouble: canDouble,
+        allowSplit: splitAvailable,
+        allowSurrender: surrenderAvailable,
+        isFreeHand: activeHand.bet === 0 && Boolean(activeHand.freeStake),
+      });
+    }
     return getBasicStrategyAdvice(activeHand.cards, game.dealer[0], {
       allowDouble: game.mode === "classic" && activeHand.cards.length === 2,
       allowSplit: game.mode === "classic" && game.hands.length < MAX_SPLIT_HANDS && canSplit(activeHand.cards),
       allowSurrender: game.mode === "classic" && activeHand.cards.length === 2 && !activeHand.fromSplit,
     });
-  }, [activeHand, game]);
+  }, [activeHand, canDouble, game, splitAvailable, surrenderAvailable]);
   const shoePercent = useMemo(
     () => (game ? Math.max(4, (game.shoe.length / SHOE_SIZE) * 100) : 100),
     [game],
@@ -1562,6 +1583,39 @@ export default function BlackjackGame() {
   const isRoomTurn = Boolean(
     roomSession && roomSession.room.currentPlayerId === roomSession.seatId,
   );
+  const roomDoubleAvailable = Boolean(roomSession && roomPlayer && roomActiveHand && isRoomTurn &&
+    (roomSession.room.mode === "doubleDownMadness"
+      ? roomActiveHand.cards.length >= 1 && scoreHand(roomActiveHand.cards).total < 21
+      : roomActiveHand.cards.length === 2) &&
+    (roomSession.room.mode === "freeBet" && isFreeDouble(roomActiveHand.cards) ||
+      roomPlayer.bankroll >= (roomActiveHand.bet || roomActiveHand.freeStake || roomPlayer.bet)));
+  const roomSplitAvailable = Boolean(roomSession && roomPlayer && roomActiveHand && isRoomTurn &&
+    roomSession.room.mode !== "doubleDownMadness" && canSplit(roomActiveHand.cards) &&
+    roomPlayer.hands.length < MAX_SPLIT_HANDS &&
+    (roomSession.room.mode === "freeBet" && isFreeSplit(roomActiveHand.cards) ||
+      roomPlayer.bankroll >= (roomActiveHand.bet || roomActiveHand.freeStake || roomPlayer.bet)));
+  const roomSurrenderAvailable = Boolean(roomSession && roomPlayer && roomActiveHand && isRoomTurn &&
+    roomSession.room.mode !== "doubleDownMadness" && roomActiveHand.cards.length === 2 && roomPlayer.hands.length === 1);
+  const roomStrategyAdvice = useMemo(() => {
+    if (!roomSession || !roomActiveHand || !roomSession.room.dealer[0] || !isRoomTurn) return null;
+    const upCard = roomSession.room.dealer[0];
+    if (roomSession.room.mode === "doubleDownMadness") {
+      return getDoubleDownMadnessStrategyAdvice(roomActiveHand.cards, upCard, roomDoubleAvailable);
+    }
+    if (roomSession.room.mode === "freeBet") {
+      return getFreeBetStrategyAdvice(roomActiveHand.cards, upCard, {
+        allowDouble: roomDoubleAvailable,
+        allowSplit: roomSplitAvailable,
+        allowSurrender: roomSurrenderAvailable,
+        isFreeHand: roomActiveHand.bet === 0 && Boolean(roomActiveHand.freeStake),
+      });
+    }
+    return getBasicStrategyAdvice(roomActiveHand.cards, upCard, {
+      allowDouble: roomDoubleAvailable,
+      allowSplit: roomSplitAvailable,
+      allowSurrender: roomSurrenderAvailable,
+    });
+  }, [isRoomTurn, roomActiveHand, roomDoubleAvailable, roomSession, roomSplitAvailable, roomSurrenderAvailable]);
   const roomPlayerCanBet = Boolean(
     roomSession && roomPlayer && roomPlayer.bankroll >= roomSession.room.table.minimum,
   );
@@ -2518,6 +2572,7 @@ export default function BlackjackGame() {
             <b>
               {tokenAmount(tableBustNotice.balance)} tokens left · {tokenAmount(tableBustNotice.minimum)} required
             </b>
+            {tableBustNotice.phrase ? <em>{tableBustNotice.phrase}</em> : null}
           </span>
         </section>
       ) : null}
@@ -2697,9 +2752,9 @@ export default function BlackjackGame() {
                 <PlayingCard
                   card={card ?? undefined}
                   delayMs={roomSession.room.phase === "settled" ? 0 : index < 2
-                    ? (roomSession.room.mode === "doubleDownMadness" && index === 1
+                    ? (1 + (roomSession.room.mode === "doubleDownMadness" && index === 1
                       ? roomDealtPlayers.length + 1
-                      : index * (roomDealtPlayers.length + 1) + roomDealtPlayers.length) * ROOM_DEAL_DELAY
+                      : index * (roomDealtPlayers.length + 1) + roomDealtPlayers.length)) * ROOM_DEAL_DELAY
                     : 0}
                   hidden={!card}
                   key={card?.id ?? `hole-${index}`}
@@ -2768,6 +2823,12 @@ export default function BlackjackGame() {
           </div>
 
           <div className="roomGameControls">
+            {roomStrategyAdvice && roomSession.room.phase === "playing" ? (
+              <div className="roomStrategyAdvisor">
+                <StrategyAdvisor advice={roomStrategyAdvice} mode={roomSession.room.mode} open={strategyOpen}
+                  onToggle={() => setStrategyOpen((open) => !open)} />
+              </div>
+            ) : null}
             {roomSession.room.phase === "betting" ? (
               !roomPlayerCanBet ? (
                 <strong>You are out of tokens for this table. You can still watch{isRoomHost ? " and open the next round" : ""}.</strong>
@@ -2829,25 +2890,17 @@ export default function BlackjackGame() {
               )
             ) : roomSession.room.phase === "playing" ? (
               pendingRoomAction ? <strong>{pendingRoomAction.action} selected — confirming with the table…</strong> : isRoomTurn ? (
-                <div className="playControls roomPlayControls">
+                <div className={`playControls roomPlayControls${roomSession.room.mode === "doubleDownMadness" ? " madnessControls" : ""}`}>
                   <button type="button" onClick={() => sendRoomAction("stand")}><small>S</small><span>Stand</span></button>
                   <button className="primaryAction" type="button" onClick={() => sendRoomAction("hit")}><small>H</small><span>Hit</span></button>
-                  <button type="button" onClick={() => sendRoomAction("double")}
-                    disabled={!roomActiveHand || (roomSession.room.mode === "doubleDownMadness"
-                      ? scoreHand(roomActiveHand.cards).total >= 21
-                      : roomActiveHand.cards.length !== 2) ||
-                      (roomSession.room.mode !== "freeBet" || !isFreeDouble(roomActiveHand.cards)) &&
-                      (roomPlayer?.bankroll ?? 0) < (roomActiveHand.bet || roomActiveHand.freeStake || roomPlayer?.bet || 0)}>
+                  <button type="button" onClick={() => sendRoomAction("double")} disabled={!roomDoubleAvailable}>
                     <small>2×</small><span>{roomSession.room.mode === "freeBet" && roomActiveHand && isFreeDouble(roomActiveHand.cards) ? "Free double" : "Double"}</span>
                   </button>
                   {roomSession.room.mode !== "doubleDownMadness" ? <>
-                    <button type="button" onClick={() => sendRoomAction("split")}
-                      disabled={!roomActiveHand || !canSplit(roomActiveHand.cards) || (roomPlayer?.hands.length ?? 1) >= MAX_SPLIT_HANDS ||
-                        (roomSession.room.mode !== "freeBet" || !isFreeSplit(roomActiveHand.cards)) &&
-                        (roomPlayer?.bankroll ?? 0) < (roomActiveHand.bet || roomActiveHand.freeStake || roomPlayer?.bet || 0)}>
+                    <button type="button" onClick={() => sendRoomAction("split")} disabled={!roomSplitAvailable}>
                       <small>Ⅱ</small><span>{roomSession.room.mode === "freeBet" && roomActiveHand && isFreeSplit(roomActiveHand.cards) ? "Free split" : "Split"}</span>
                     </button>
-                    <button type="button" onClick={() => sendRoomAction("surrender")} disabled={!roomActiveHand || roomActiveHand.cards.length !== 2 || (roomPlayer?.hands.length ?? 0) !== 1}><small>½</small><span>Surrender</span></button>
+                    <button type="button" onClick={() => sendRoomAction("surrender")} disabled={!roomSurrenderAvailable}><small>½</small><span>Surrender</span></button>
                   </> : null}
                 </div>
               ) : <strong>Waiting for {roomSession.room.players.find((player) => player.id === roomSession.room.currentPlayerId)?.name}</strong>
@@ -2984,6 +3037,7 @@ export default function BlackjackGame() {
               <div className="tableUtilityRow">
                 <StrategyAdvisor
                   advice={strategyAdvice}
+                  mode={game.mode}
                   open={strategyOpen}
                   onToggle={() => {
                     setCardCountOpen(false);

@@ -74,6 +74,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .tableBustCopy small { color: #c9958f; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .2em; }
 .tableBustCopy strong { margin: 2px 0 5px; color: #ff9487; font: 700 clamp(43px, 8vw, 68px)/.95 Georgia, serif; letter-spacing: .025em; text-shadow: 0 4px 20px rgba(203,70,61,.27); }
 .tableBustCopy > b { color: #d7bbb7; font-size: 11px; font-weight: 600; line-height: 1.45; }
+.tableBustCopy > em { margin-top: 7px; color: #f2a69c; font-size: 12px; font-style: normal; line-height: 1.35; }
 @keyframes bustedSlam {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(1.55) rotate(-2deg); }
   11% { opacity: 1; transform: translate(-50%, -50%) scale(.97) rotate(0); }
@@ -245,12 +246,12 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .multiplayerStatus small { display: block; margin-top: 6px; color: #71857a; }
 .multiplayerStatus .roomErrorText { color: #ee9f96; }
 
-.roomGameScreen { min-height: calc(100dvh - 74px); padding: 17px clamp(12px, 3vw, 42px) 18px; display: grid; grid-template-rows: auto minmax(126px, .55fr) auto minmax(270px, 1.45fr) auto; gap: 8px; overflow: hidden; background: radial-gradient(ellipse at 50% 40%, rgba(38,121,87,.3), transparent 50%), #092b21; }
+.roomGameScreen { min-height: calc(100dvh - 74px); padding: 17px clamp(12px, 3vw, 42px) 18px; display: grid; grid-template-rows: auto minmax(164px, .55fr) auto minmax(270px, 1.45fr) auto; gap: 8px; overflow: hidden; background: radial-gradient(ellipse at 50% 40%, rgba(38,121,87,.3), transparent 50%), #092b21; }
 .roomGameTopline { display: flex; align-items: center; justify-content: space-between; color: #91a69a; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; }
 .roomGameTopline strong { color: #d3ddd7; }
 .roomDealerArea { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 0; }
 .roomGameMessage { justify-self: center; padding: 8px 21px; border: 1px solid rgba(255,255,255,.1); border-radius: 22px; background: rgba(4,18,14,.74); color: #fffdf8; font: 18px Georgia, serif; }
-.roomPlayersStage { width: min(1180px, 100%); min-height: 270px; justify-self: center; display: grid; grid-template-columns: minmax(125px, 210px) minmax(330px, 680px) minmax(125px, 210px); align-items: start; justify-content: center; gap: clamp(8px, 2vw, 24px); padding: 2px 0 3px; }
+.roomPlayersStage { width: min(1180px, 100%); min-height: 270px; justify-self: center; display: grid; grid-template-columns: minmax(125px, 210px) minmax(330px, 680px) minmax(125px, 210px); align-items: start; justify-content: center; gap: clamp(8px, 2vw, 24px); padding: 16px 0 3px; }
 .roomOpponentColumn { height: 100%; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; }
 .roomPlayerSeat { min-width: 0; position: relative; border: 1px solid rgba(255,255,255,.09); background: rgba(4,20,15,.54); transition: border-color .2s ease, box-shadow .2s ease, opacity .2s ease, transform .2s ease; }
 .roomLocalPlayer { width: 100%; min-height: 252px; padding: 18px clamp(16px, 3vw, 34px) 13px; align-self: start; border-color: rgba(212,174,98,.2); border-radius: 44% 44% 18px 18px / 25% 25% 18px 18px; background: radial-gradient(ellipse at 50% 72%, rgba(212,174,98,.11), transparent 55%), rgba(4,20,15,.38); box-shadow: inset 0 1px rgba(255,255,255,.04), 0 18px 45px rgba(0,0,0,.18); }
@@ -353,6 +354,8 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomWaiting { min-height: 62px; display: grid; place-items: center; color: #81958a; font-size: 10px; text-align: center; }
 .roomLocalPlayer .roomWaiting { min-height: 140px; font-size: 13px; }
 .roomGameControls { width: min(760px, 100%); min-height: 72px; justify-self: center; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 9px 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 15px; background: rgba(4,18,14,.9); }
+.roomStrategyAdvisor { flex: 0 1 170px; min-width: 130px; }
+.roomStrategyAdvisor .strategyPanel { top: auto; bottom: calc(100% + 8px); left: 0; }
 .roomGameControls > strong { color: #c6d1ca; font-size: 13px; }
 .roomWagerPicker { display: flex; align-items: center; gap: 6px; }
 .roomWagerPicker button { cursor: pointer; }
@@ -368,6 +371,8 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomWagerSummary strong { margin-top: 3px; color: #f3dfb3; font-size: 15px; font-variant-numeric: tabular-nums; }
 .roomGameControls .dealButton { margin: 0; }
 .roomPlayControls { border: 0; background: none; box-shadow: none; padding: 0; }
+.roomPlayControls.madnessControls { flex: 1 1 360px; max-width: 440px; min-height: 68px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.roomPlayControls.madnessControls button { min-width: 0; width: 100%; }
 .roomControlError { color: #f0a29a; font-size: 11px; }
 
 .tableScreen {
@@ -444,7 +449,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .playingCard.cardMotionDealer { animation-name: dealToDealer; }
 .playingCard.cardMotionPlayer { animation-name: dealToPlayer; }
 .playingCard.cardReveal { transform-origin: 50% 50%; animation: flipReveal .56s cubic-bezier(.3,.7,.2,1) both; }
-.roomGameScreen .playingCard { animation-duration: .44s; }
+.roomGameScreen .playingCard { animation-duration: .42s; }
 .roomGameScreen .playingCard.cardReveal { animation-duration: .56s; }
 .playingCard.cardNoMotion { animation: none; will-change: auto; }
 .splitHands .playerHand:nth-child(2) .playingCard:last-child { animation-delay: .14s; }
@@ -662,6 +667,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .bustedChipGraphic::before, .bustedChipGraphic::after { width: 18px; height: 14px; right: -12px; }
   .tableBustCopy strong { font-size: clamp(39px, 14vw, 54px); }
   .tableBustCopy > b { font-size: 9px; }
+  .tableBustCopy > em { font-size: 10px; }
   .welcomeScreen { min-height: calc(100dvh - 62px); justify-content: flex-start; padding-top: max(40px, 7vh); }
   .welcomeScreen h1 { font-size: 45px; }
   .welcomeTagline { font-size: 16px; }
@@ -691,11 +697,11 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .multiplayerStatus { line-height: 1.5; }
   .roomSheet { padding: 28px 21px; }
 
-  .roomGameScreen { min-height: calc(100dvh - 62px); grid-template-rows: 28px 108px auto minmax(250px, 1fr) auto; padding: 10px 8px max(8px, env(safe-area-inset-bottom)); }
+  .roomGameScreen { min-height: calc(100dvh - 62px); grid-template-rows: 28px 138px auto minmax(250px, 1fr) auto; padding: 10px 8px max(8px, env(safe-area-inset-bottom)); }
   .roomGameTopline { font-size: 9px; }
   .roomGameTopline strong { max-width: 160px; text-align: center; }
   .roomGameMessage { font-size: 15px; text-align: center; }
-  .roomPlayersStage { min-height: 250px; grid-template-columns: minmax(58px, .56fr) minmax(210px, 2.2fr) minmax(58px, .56fr); gap: 4px; padding-top: 4px; }
+  .roomPlayersStage { min-height: 250px; grid-template-columns: minmax(58px, .56fr) minmax(210px, 2.2fr) minmax(58px, .56fr); gap: 4px; padding-top: 16px; }
   .roomOpponentColumn { gap: 5px; }
   .roomOpponentPlayer { min-height: 87px; padding: 7px 3px 5px; border-radius: 9px; }
   .roomOpponentPlayer .roomPlayerSeatHeader { flex-direction: column; gap: 2px; text-align: center; }
@@ -735,10 +741,13 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .roomLocalPlayer .roomHand > b { top: 66px; font-size: 8px; }
   .roomTurnBadge { top: -9px; padding: 4px 6px; font-size: 6px; }
   .roomGameControls { flex-wrap: wrap; min-height: 82px; }
+  .roomStrategyAdvisor { flex-basis: min(170px, 100%); }
+  .roomStrategyAdvisor .strategyPanel { left: 50%; translate: -50% 0; width: min(310px, calc(100vw - 32px)); }
   .roomWagerPicker { width: 100%; justify-content: center; overflow-x: auto; }
   .roomWagerPicker button { flex: 0 0 auto; white-space: nowrap; }
   .roomWagerSummary { min-width: 105px; }
   .roomPlayControls { min-height: 112px; }
+  .roomPlayControls.madnessControls { min-height: 68px; }
 
   .tableScreen { min-height: calc(100dvh - 62px); grid-template-rows: 72px minmax(135px, .92fr) 40px minmax(190px, 1.14fr) auto; padding: 11px 9px max(9px, env(safe-area-inset-bottom)); }
   .tableRail { left: -12%; right: -12%; top: 25px; height: 69%; }
@@ -793,6 +802,8 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 }
 
 @media (max-width: 390px) {
+  .roomPlayersStage { grid-template-columns: minmax(45px, .5fr) minmax(0, 2.2fr) minmax(45px, .5fr); }
+  .roomGameTopline { font-size: 8px; letter-spacing: .04em; }
   .brand { gap: 0; }
   .brandMark { display: none; }
   .brandWords small { display: none; }

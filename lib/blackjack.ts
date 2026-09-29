@@ -114,7 +114,7 @@ export type SideBetOutcome = {
   profit: number;
 };
 
-export type BasicStrategyMove = "Hit" | "Stand" | "Double" | "Split" | "Surrender";
+export type BasicStrategyMove = "Hit" | "Stand" | "Double" | "Free double" | "Split" | "Free split" | "Surrender";
 
 export type BasicStrategyAdvice = {
   move: BasicStrategyMove;
@@ -322,6 +322,156 @@ export function getBasicStrategyAdvice(
       : advice("Hit", `Hit hard 9 against dealer ${dealerLabel}.`);
   }
   return advice("Hit", `${handLabel} should draw against dealer ${dealerLabel}.`);
+}
+
+function strategyDealerValue(card: Card): number {
+  return card.rank === "A" ? 11 : ["10", "J", "Q", "K"].includes(card.rank) ? 10 : Number(card.rank);
+}
+
+function strategyHandLabel(cards: Card[]): string {
+  if (canSplit(cards)) {
+    const rank = cards[0].rank;
+    const value = rank === "A" ? "aces" : ["10", "J", "Q", "K"].includes(rank) ? "tens" : `${rank}s`;
+    return `Pair of ${value}`;
+  }
+  const score = scoreHand(cards);
+  return `${score.isSoft ? "Soft" : "Hard"} ${score.total}`;
+}
+
+const STRATEGY_DEALER_VALUES = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+
+// Michael Shackleford's six-deck, H17, push-22 Double Down Madness strategy.
+// https://wizardofodds.com/games/blackjack/double-down-madness/
+const MADNESS_HARD: Record<number, string> = {
+  2: "HHHHDDHHHH", 3: "HHHHDHHHHH", 8: "HHHDDDHHHH",
+  9: "HDDDDDDHHH", 10: "DDDDDDDDHH", 11: "DDDDDDDDDD",
+  12: "HHHSSHHHHH", 13: "HSSSSHHHHH",
+};
+const MADNESS_SOFT: Record<number, string> = {
+  12: "HDDDDDDHHH", 13: "HHDDDDHHHH", 14: "HHHDDDHHHH",
+  15: "HHHHDHHHHH", 16: "HHHHDHHHHH", 17: "HHHHDDHHHH",
+  18: "SSSDDSSHHH",
+};
+
+export function getDoubleDownMadnessStrategyAdvice(
+  cards: Card[],
+  dealerUpCard: Card,
+  allowDouble: boolean,
+): BasicStrategyAdvice {
+  const dealer = strategyDealerValue(dealerUpCard);
+  const score = scoreHand(cards);
+  const handLabel = strategyHandLabel(cards);
+  const dealerIndex = STRATEGY_DEALER_VALUES.indexOf(dealer as (typeof STRATEGY_DEALER_VALUES)[number]);
+  let cell: string;
+
+  if (cards.length === 1 && ["10", "J", "Q", "K"].includes(cards[0].rank)) {
+    cell = "D";
+  } else if (cards.length === 1 && cards[0].rank === "A") {
+    cell = dealer === 11 ? "H" : "D";
+  } else if (score.isSoft) {
+    cell = score.total >= 19 ? "S" : MADNESS_SOFT[score.total]?.[dealerIndex] ?? "H";
+  } else {
+    cell = score.total >= 17 ? "S" : score.total >= 14
+      ? dealer <= 6 ? "S" : "H"
+      : MADNESS_HARD[score.total]?.[dealerIndex] ?? "H";
+  }
+
+  if (cell === "D" && allowDouble) {
+    const singleAce = cards.length === 1 && cards[0].rank === "A";
+    return {
+      move: "Double", handLabel,
+      explanation: singleAce
+        ? `Double the opening ace against dealer ${dealerUpCard.rank}. You will receive exactly one more card.`
+        : `Doubling ${handLabel.toLowerCase()} has the stronger return against dealer ${dealerUpCard.rank}; you can keep playing after the draw.`,
+      fallback: score.isSoft && score.total === 18 ? "Stand" : "Hit",
+    };
+  }
+  if (cell === "D") {
+    const fallback = score.isSoft && score.total === 18 ? "Stand" : "Hit";
+    return { move: fallback, handLabel, explanation: `Doubling is unavailable with this balance. ${fallback} against dealer ${dealerUpCard.rank}.` };
+  }
+  if (cell === "S") {
+    return { move: "Stand", handLabel, explanation: `Stand against dealer ${dealerUpCard.rank}; dealer 22 pushes rather than paying this hand.` };
+  }
+  return {
+    move: "Hit", handLabel,
+    explanation: cards.length === 1 && cards[0].rank === "A"
+      ? "Hit the opening ace against a dealer ace. This draw ends your hand."
+      : `Draw against dealer ${dealerUpCard.rank}; you can decide again after the card arrives.`,
+  };
+}
+
+// Wizard of Odds charts for a paid hand, a free split hand, and pairs.
+// https://wizardofodds.com/games/free-bet-blackjack/
+const FREE_BET_PAID_HARD: Record<number, string> = {
+  12: "HHHSSHHHHH", 13: "HSSSSHHHHH", 14: "SSSSSHHHHH",
+  15: "SSSSSHHHRR", 16: "SSSSSHHRRR", 17: "SSSSSSSSST",
+};
+const FREE_BET_FREE_HARD: Record<number, string> = {
+  12: "HHHSSHHHHH", 13: "HSSSSHHHHH", 14: "HSSSSHHHHH",
+  15: "SSSSSHHHHH", 16: "SSSSSHHHHH", 17: "SSSSSHHHSH",
+};
+const FREE_BET_PAID_SOFT: Record<number, string> = {
+  16: "HHHHDHHHHH", 17: "HHHDDHHHHH", 18: "SSSDDSSHHH",
+};
+const FREE_BET_FREE_SOFT: Record<number, string> = {
+  16: "HHHHDHHHHH", 17: "HHHDDHHHHH", 18: "HHDDDSHHHH",
+  19: "SSSDDSSSSS", 20: "SSSSDSSSSS",
+};
+
+export function getFreeBetStrategyAdvice(
+  cards: Card[],
+  dealerUpCard: Card,
+  options: { allowDouble: boolean; allowSplit: boolean; allowSurrender: boolean; isFreeHand: boolean },
+): BasicStrategyAdvice {
+  const dealer = strategyDealerValue(dealerUpCard);
+  const dealerIndex = STRATEGY_DEALER_VALUES.indexOf(dealer as (typeof STRATEGY_DEALER_VALUES)[number]);
+  const score = scoreHand(cards);
+  const handLabel = strategyHandLabel(cards);
+  const dealerLabel = dealerUpCard.rank;
+
+  if (cards.length === 2 && options.allowSplit && isFreeSplit(cards) && cards[0].rank !== "5") {
+    return {
+      move: "Free split", handLabel,
+      explanation: `Split ${handLabel.toLowerCase()} against dealer ${dealerLabel}; the added hand is covered by a free wager.`,
+    };
+  }
+  if (isFreeDouble(cards) && options.allowDouble) {
+    return {
+      move: "Free double", handLabel,
+      explanation: `Take the free double against dealer ${dealerLabel}. The extra wager is covered, and you receive one card.`,
+    };
+  }
+
+  let cell: string;
+  if (score.isSoft) {
+    cell = score.total >= (options.isFreeHand ? 21 : 19)
+      ? "S"
+      : (options.isFreeHand ? FREE_BET_FREE_SOFT : FREE_BET_PAID_SOFT)[score.total]?.[dealerIndex] ?? "H";
+  } else {
+    cell = score.total >= 18 ? "S" : score.total <= 11 ? "H"
+      : (options.isFreeHand ? FREE_BET_FREE_HARD : FREE_BET_PAID_HARD)[score.total]?.[dealerIndex] ?? "H";
+  }
+
+  if ((cell === "R" || cell === "T") && options.allowSurrender) {
+    return {
+      move: "Surrender", handLabel,
+      explanation: `Surrender ${handLabel.toLowerCase()} against dealer ${dealerLabel} to recover half of the paid wager.`,
+      fallback: cell === "T" ? "Stand" : "Hit",
+    };
+  }
+  if (cell === "R" || cell === "T") cell = cell === "T" ? "S" : "H";
+  if (cell === "D" && options.allowDouble) {
+    return {
+      move: "Double", handLabel,
+      explanation: `A paid double has the best return for ${handLabel.toLowerCase()} against dealer ${dealerLabel}.`,
+      fallback: score.total >= 19 || (!options.isFreeHand && score.total === 18) ? "Stand" : "Hit",
+    };
+  }
+  if (cell === "D") cell = score.total >= 19 || (!options.isFreeHand && score.total === 18) ? "S" : "H";
+  return cell === "S"
+    ? { move: "Stand", handLabel, explanation: `Stand against dealer ${dealerLabel}, allowing for the dealer-22 push rule.` }
+    : { move: "Hit", handLabel, explanation: `Draw against dealer ${dealerLabel}; the dealer-22 rule changes the value of standing.` };
 }
 
 export function scorePerfectPairs(cards: Card[]): SideBetResult | null {
