@@ -86,6 +86,7 @@ type RoomPlayerView = {
   hands: Array<{
     cards: CardType[];
     bet: number;
+    freeStake?: number;
     status: HandStatus;
     result?: string;
   }>;
@@ -97,6 +98,7 @@ type RoomPlayerView = {
 type RoomView = {
   code: string;
   hostId: string;
+  mode: GameMode;
   phase: "lobby" | "betting" | "playing" | "settled";
   table: { id: string; name: string; minimum: number; chips: number[] };
   players: RoomPlayerView[];
@@ -158,7 +160,7 @@ const CARD_COUNT_RANKS: CardType["rank"][] = [
 ];
 
 const DEAL_DELAY = 330;
-const ROOM_DEAL_DELAY = 100;
+const ROOM_DEAL_DELAY = 190;
 const cardBounceAnimations = new WeakMap<HTMLDivElement, Animation>();
 
 function pause(milliseconds: number) {
@@ -452,6 +454,9 @@ function RoomPlayerSeatView({
   isActive,
   tableMinimum,
   roomPhase,
+  roomMode,
+  dealIndex,
+  dealPlayerCount,
   onCardInteract,
   onSelect,
 }: {
@@ -460,6 +465,9 @@ function RoomPlayerSeatView({
   isActive: boolean;
   tableMinimum: number;
   roomPhase: RoomView["phase"];
+  roomMode: GameMode;
+  dealIndex: number;
+  dealPlayerCount: number;
   onCardInteract: () => void;
   onSelect?: (playerId: string) => void;
 }) {
@@ -501,16 +509,19 @@ function RoomPlayerSeatView({
               <div className={isLocal ? "roomLocalCardFan" : "miniCardFan"}>
                 {hand.cards.map((card, cardIndex) => (
                   <PlayingCard
-                    animated={isLocal}
+                    animated
                     card={card}
-                    delayMs={isLocal && hand.cards.length <= 2 ? cardIndex * ROOM_DEAL_DELAY + handIndex * 40 : 0}
+                    delayMs={handIndex === 0 && player.hands.length === 1 && dealIndex >= 0 &&
+                      (roomMode === "doubleDownMadness" ? hand.cards.length === 1 : hand.cards.length === 2)
+                      ? (roomMode === "doubleDownMadness" ? dealIndex : cardIndex * (dealPlayerCount + 1) + dealIndex) * ROOM_DEAL_DELAY
+                      : 0}
                     key={card.id}
                     motion={isLocal ? "player" : undefined}
                     onInteract={onCardInteract}
                   />
                 ))}
               </div>
-              <small>{roomHandTotalLabel(hand.cards)} · bet {tokenAmount(hand.bet)}</small>
+              <small>{roomHandTotalLabel(hand.cards)} · {hand.bet ? `bet ${tokenAmount(hand.bet)}` : `free bet ${tokenAmount(hand.freeStake ?? 0)}`}</small>
               {hand.result ? <b className={hand.result === "BUST" ? "bust" : ""}>{hand.result}</b> : null}
             </div>
           ))}
@@ -536,6 +547,9 @@ const RoomPlayerSeat = memo(RoomPlayerSeatView, (previous, next) =>
   previous.isActive === next.isActive &&
   previous.tableMinimum === next.tableMinimum &&
   previous.roomPhase === next.roomPhase &&
+  previous.roomMode === next.roomMode &&
+  previous.dealIndex === next.dealIndex &&
+  previous.dealPlayerCount === next.dealPlayerCount &&
   previous.onCardInteract === next.onCardInteract &&
   previous.onSelect === next.onSelect &&
   previous.player.id === next.player.id &&
@@ -753,6 +767,7 @@ export default function BlackjackGame() {
   const previousAchievementSourceRef = useRef("");
   const achievementQueueRef = useRef<number[]>([]);
   const lastTableBustRoundRef = useRef("");
+  const roomBustTrackerRef = useRef<{ source: string; announced: boolean } | null>(null);
   const lastBurnRevealKeyRef = useRef("");
   const analyticsSessionIdRef = useRef(0);
   const trackedRoundsRef = useRef(new Set<string>());
@@ -1336,6 +1351,14 @@ export default function BlackjackGame() {
         !previousResults.has(`${hand.cards.map((card) => card.id).join(",")}:${hand.result}`),
     ) ?? [];
     const resultDelay = dealSoundStart + dealSoundCount * soundSpacing + 120;
+    const previousWinningSideBets = new Set(
+      previousPlayer?.sideBetResults.filter((outcome) => outcome.won)
+        .map((outcome) => `${outcome.name}:${outcome.detail}:${outcome.profit}`) ?? [],
+    );
+    const winningSideBets = nextPlayer?.sideBetResults.filter((outcome) =>
+      outcome.won && (nextRoom.round !== previousRoom.round ||
+        !previousWinningSideBets.has(`${outcome.name}:${outcome.detail}:${outcome.profit}`)),
+    ) ?? [];
 
     if (newResults.some((hand) => hand.result === "BLACKJACK")) {
       window.setTimeout(() => playCardSound("blackjack"), resultDelay);
@@ -1348,6 +1371,14 @@ export default function BlackjackGame() {
         nextPlayer.bankroll < nextRoom.table.minimum,
       );
       if (!bankrollBusted) window.setTimeout(() => playCardSound("lose"), resultDelay);
+    }
+    if (winningSideBets.length) {
+      const sideBetDelay = resultDelay + (newResults.some((hand) => hand.result === "BLACKJACK") ? 650 : 180);
+      window.setTimeout(() => {
+        if (previousRoomRef.current?.code !== nextRoom.code || previousRoomRef.current.round !== nextRoom.round) return;
+        setSideBetCelebration({ id: Date.now(), outcomes: winningSideBets });
+        playCardSound("sidebet");
+      }, sideBetDelay);
     }
   }, [playCardSound, roomSession]);
 
@@ -1522,6 +1553,8 @@ export default function BlackjackGame() {
   const roomOpponents = roomSession
     ? roomSession.room.players.filter((player) => player.id !== roomSession.seatId)
     : [];
+  const roomDealtPlayers = roomSession?.room.players.filter((player) => player.hands.length > 0) ?? [];
+  const roomDealIndex = new Map(roomDealtPlayers.map((player, index) => [player.id, index]));
   const leftRoomOpponents = roomOpponents.filter((_, index) => index % 2 === 0);
   const rightRoomOpponents = roomOpponents.filter((_, index) => index % 2 === 1);
   const roomActiveHand = roomPlayer?.hands[roomPlayer.activeHand];
@@ -1538,15 +1571,7 @@ export default function BlackjackGame() {
     : game
       ? "solo"
       : "wallet";
-  const completedTableBustKey = roomPlayer && roomSession && (
-    roomSession.room.phase === "settled" ||
-    (roomSession.room.phase === "betting" && roomPlayer.bet === 0 &&
-      roomPlayer.bankroll < roomSession.room.table.minimum)
-  )
-    ? `room:${roomSession.code}:${roomPlayer.id}:${roomSession.room.round}`
-    : game?.phase === "settled"
-      ? `solo:${game.round}`
-      : null;
+  const completedTableBustKey = game?.phase === "settled" ? `solo:${game.round}` : null;
   const completedTableBalance = roomPlayer?.bankroll ?? game?.bankroll ?? wallet;
   const completedTableMinimum = roomSession?.room.table.minimum ?? selectedTable.minimum;
 
@@ -1569,7 +1594,7 @@ export default function BlackjackGame() {
     );
     sendGAEvent("event", "blackjack_round_settled", {
       ...totals,
-      game_mode: isRoomRound ? "classic" : game!.mode,
+      game_mode: isRoomRound ? roomSession!.room.mode : game!.mode,
       play_context: isRoomRound ? "multiplayer" : "solo",
       token_unit: "practice_tokens",
     });
@@ -1639,6 +1664,35 @@ export default function BlackjackGame() {
     completedTableMinimum,
     showTableBust,
   ]);
+
+  useEffect(() => {
+    if (!roomSession || !roomPlayer) {
+      roomBustTrackerRef.current = null;
+      return;
+    }
+    const source = `${roomSession.code}:${roomPlayer.id}`;
+    if (roomBustTrackerRef.current?.source !== source) {
+      roomBustTrackerRef.current = {
+        source,
+        announced: roomPlayer.bankroll < roomSession.room.table.minimum &&
+          (roomSession.room.phase === "settled" || roomPlayer.hands.some((hand) => hand.result === "BUST")),
+      };
+      return;
+    }
+    const tracker = roomBustTrackerRef.current;
+    const minimum = roomSession.room.table.minimum;
+    if (roomPlayer.bankroll >= minimum) {
+      tracker.announced = false;
+      return;
+    }
+    if (tracker.announced) return;
+    const hasBustedHand = roomPlayer.hands.some((hand) => hand.status === "busted" || hand.result === "BUST");
+    const couldStillPay = roomPlayer.hands.some((hand) => ["active", "standing"].includes(hand.status));
+    if ((hasBustedHand && !couldStillPay) || (roomSession.room.phase === "settled" && roomPlayer.hands.length > 0)) {
+      tracker.announced = true;
+      window.setTimeout(() => showTableBust(roomPlayer.bankroll, minimum, true), 0);
+    }
+  }, [roomPlayer, roomSession, showTableBust]);
 
   function selectSoloHandCount(handCount: SoloHandCount) {
     playCardSound("click");
@@ -2288,6 +2342,7 @@ export default function BlackjackGame() {
           name: roomName,
           passcode: roomPasscode,
           startingBankroll: wallet,
+          ...(roomMode === "create" ? { mode: selectedMode } : {}),
         }),
       });
       const data = (await response.json()) as {
@@ -2411,7 +2466,11 @@ export default function BlackjackGame() {
       }
       applyRoomUpdate(data.room!);
       if (action === "next-round") {
-        setRoomWager(data.room!.table.minimum);
+        const updatedRoom = data.room!;
+        const balance = updatedRoom.players.find((player) => player.id === roomSession.seatId)?.bankroll ?? 0;
+        setRoomWager((current) => balance >= updatedRoom.table.minimum
+          ? Math.min(Math.max(current, updatedRoom.table.minimum), balance)
+          : current);
         setRoomSideBets({ ...EMPTY_SIDE_BETS });
       }
       if (action === "donate" || action === "kick") setDonationTarget(null);
@@ -2545,7 +2604,7 @@ export default function BlackjackGame() {
           <div className="roomLobbyCard">
             <div className="welcomeEyebrow"><span /> Live private room</div>
             <h1>Table {roomSession.code}</h1>
-            <p>Share this invite link with up to four friends.</p>
+            <p>{GAME_MODES.find((mode) => mode.id === roomSession.room.mode)?.name} · Share this invite link with up to four friends.</p>
 
             <button
               className="roomCodeDisplay"
@@ -2621,7 +2680,7 @@ export default function BlackjackGame() {
         <section className="roomGameScreen">
           <div className="roomGameTopline">
             <span>Room {roomSession.code}</span>
-            <strong>{roomSession.room.table.name} · Round {roomSession.room.round}</strong>
+            <strong>{roomSession.room.table.name} · {GAME_MODES.find((mode) => mode.id === roomSession.room.mode)?.name} · Round {roomSession.room.round}</strong>
             <span>{DECK_COUNT}-deck shoe · {roomSession.room.shoeRemaining} cards</span>
             <button type="button" className="roomExitButton" onClick={() => void sendRoomAction("leave")}>Leave</button>
           </div>
@@ -2637,7 +2696,11 @@ export default function BlackjackGame() {
               {roomSession.room.dealer.length ? roomSession.room.dealer.map((card, index) => (
                 <PlayingCard
                   card={card ?? undefined}
-                  delayMs={roomSession.room.phase === "settled" ? 0 : index < 2 ? index * ROOM_DEAL_DELAY : 0}
+                  delayMs={roomSession.room.phase === "settled" ? 0 : index < 2
+                    ? (roomSession.room.mode === "doubleDownMadness" && index === 1
+                      ? roomDealtPlayers.length + 1
+                      : index * (roomDealtPlayers.length + 1) + roomDealtPlayers.length) * ROOM_DEAL_DELAY
+                    : 0}
                   hidden={!card}
                   key={card?.id ?? `hole-${index}`}
                   motion="dealer"
@@ -2660,11 +2723,14 @@ export default function BlackjackGame() {
                 <RoomPlayerSeat
                   isActive={player.id === roomSession.room.currentPlayerId}
                   isLocal={false}
+                  dealIndex={roomDealIndex.get(player.id) ?? -1}
+                  dealPlayerCount={roomDealtPlayers.length}
                   key={player.id}
                   onCardInteract={playCardClick}
                   player={player}
                   tableMinimum={roomSession.room.table.minimum}
                   roomPhase={roomSession.room.phase}
+                  roomMode={roomSession.room.mode}
                   onSelect={selectDonationPlayer}
                 />
               ))}
@@ -2673,10 +2739,13 @@ export default function BlackjackGame() {
               <RoomPlayerSeat
                 isActive={roomPlayer.id === roomSession.room.currentPlayerId}
                 isLocal
+                dealIndex={roomDealIndex.get(roomPlayer.id) ?? -1}
+                dealPlayerCount={roomDealtPlayers.length}
                 onCardInteract={playCardClick}
                 player={visibleRoomPlayer ?? roomPlayer}
                 tableMinimum={roomSession.room.table.minimum}
                 roomPhase={roomSession.room.phase}
+                roomMode={roomSession.room.mode}
               />
             ) : null}
             <div className="roomOpponentColumn roomOpponentColumnRight" aria-label="Players to your right">
@@ -2684,11 +2753,14 @@ export default function BlackjackGame() {
                 <RoomPlayerSeat
                   isActive={player.id === roomSession.room.currentPlayerId}
                   isLocal={false}
+                  dealIndex={roomDealIndex.get(player.id) ?? -1}
+                  dealPlayerCount={roomDealtPlayers.length}
                   key={player.id}
                   onCardInteract={playCardClick}
                   player={player}
                   tableMinimum={roomSession.room.table.minimum}
                   roomPhase={roomSession.room.phase}
+                  roomMode={roomSession.room.mode}
                   onSelect={selectDonationPlayer}
                 />
               ))}
@@ -2726,7 +2798,7 @@ export default function BlackjackGame() {
                       </button>
                     ))}
                   </div>
-                  <div className="roomSideBetPicker" aria-label="Multiplayer side bets">
+                  {roomSession.room.mode !== "doubleDownMadness" ? <div className="roomSideBetPicker" aria-label="Multiplayer side bets">
                     {(Object.keys(SIDE_BET_LABELS) as SideBetKey[]).map((key) => (
                       <button type="button" key={key} className={roomSideBets[key] ? "selected" : ""}
                         onClick={() => {
@@ -2737,12 +2809,12 @@ export default function BlackjackGame() {
                         {SIDE_BET_LABELS[key].short} <b>{roomSideBets[key] || "—"}</b>
                       </button>
                     ))}
-                  </div>
+                  </div> : null}
                   <div className="roomWagerSummary" aria-live="polite">
                     <ChipPile amount={roomWager} denominations={roomSession.room.table.chips} />
                     <span>
                       <small>Current bet</small>
-                      <strong>{tokenAmount(roomWager)} + {tokenAmount(sideBetStake(roomSideBets))} side</strong>
+                      <strong>{tokenAmount(roomWager)}{roomSession.room.mode !== "doubleDownMadness" ? ` + ${tokenAmount(sideBetStake(roomSideBets))} side` : ""}</strong>
                     </span>
                   </div>
                   <button
@@ -2760,9 +2832,23 @@ export default function BlackjackGame() {
                 <div className="playControls roomPlayControls">
                   <button type="button" onClick={() => sendRoomAction("stand")}><small>S</small><span>Stand</span></button>
                   <button className="primaryAction" type="button" onClick={() => sendRoomAction("hit")}><small>H</small><span>Hit</span></button>
-                  <button type="button" onClick={() => sendRoomAction("double")} disabled={!roomActiveHand || roomActiveHand.cards.length !== 2 || (roomPlayer?.bankroll ?? 0) < (roomActiveHand?.bet ?? 0)}><small>2×</small><span>Double</span></button>
-                  <button type="button" onClick={() => sendRoomAction("split")} disabled={!roomActiveHand || !canSplit(roomActiveHand.cards) || (roomPlayer?.hands.length ?? 1) >= MAX_SPLIT_HANDS || (roomPlayer?.bankroll ?? 0) < (roomActiveHand?.bet ?? 0)}><small>Ⅱ</small><span>Split</span></button>
-                  <button type="button" onClick={() => sendRoomAction("surrender")} disabled={!roomActiveHand || roomActiveHand.cards.length !== 2 || (roomPlayer?.hands.length ?? 0) !== 1}><small>½</small><span>Surrender</span></button>
+                  <button type="button" onClick={() => sendRoomAction("double")}
+                    disabled={!roomActiveHand || (roomSession.room.mode === "doubleDownMadness"
+                      ? scoreHand(roomActiveHand.cards).total >= 21
+                      : roomActiveHand.cards.length !== 2) ||
+                      (roomSession.room.mode !== "freeBet" || !isFreeDouble(roomActiveHand.cards)) &&
+                      (roomPlayer?.bankroll ?? 0) < (roomActiveHand.bet || roomActiveHand.freeStake || roomPlayer?.bet || 0)}>
+                    <small>2×</small><span>{roomSession.room.mode === "freeBet" && roomActiveHand && isFreeDouble(roomActiveHand.cards) ? "Free double" : "Double"}</span>
+                  </button>
+                  {roomSession.room.mode !== "doubleDownMadness" ? <>
+                    <button type="button" onClick={() => sendRoomAction("split")}
+                      disabled={!roomActiveHand || !canSplit(roomActiveHand.cards) || (roomPlayer?.hands.length ?? 1) >= MAX_SPLIT_HANDS ||
+                        (roomSession.room.mode !== "freeBet" || !isFreeSplit(roomActiveHand.cards)) &&
+                        (roomPlayer?.bankroll ?? 0) < (roomActiveHand.bet || roomActiveHand.freeStake || roomPlayer?.bet || 0)}>
+                      <small>Ⅱ</small><span>{roomSession.room.mode === "freeBet" && roomActiveHand && isFreeSplit(roomActiveHand.cards) ? "Free split" : "Split"}</span>
+                    </button>
+                    <button type="button" onClick={() => sendRoomAction("surrender")} disabled={!roomActiveHand || roomActiveHand.cards.length !== 2 || (roomPlayer?.hands.length ?? 0) !== 1}><small>½</small><span>Surrender</span></button>
+                  </> : null}
                 </div>
               ) : <strong>Waiting for {roomSession.room.players.find((player) => player.id === roomSession.room.currentPlayerId)?.name}</strong>
             ) : isRoomHost ? (
@@ -3249,6 +3335,18 @@ export default function BlackjackGame() {
                 ? "Choose a passcode, then share it and the generated room code with your friends."
                 : "Enter the five-character room code and the host’s passcode."}
             </p>
+            {roomMode === "create" ? <div className="roomModePicker" role="group" aria-label="Game mode">
+              <span>Game mode</span>
+              <div>
+                {GAME_MODES.map((mode) => (
+                  <button type="button" key={mode.id} className={selectedMode === mode.id ? "selected" : ""}
+                    aria-pressed={selectedMode === mode.id} onClick={() => setSelectedMode(mode.id)}>
+                    <i className="gameModeIcon"><ModeIcon mode={mode.id} /></i>
+                    <span><strong>{mode.name}</strong><small>{mode.description}</small></span>
+                  </button>
+                ))}
+              </div>
+            </div> : null}
             <label>
               <span>Display name</span>
               <input

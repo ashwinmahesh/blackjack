@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createRoom, RoomError } from "../../../lib/server/rooms";
+import type { GameMode } from "../../../lib/blackjack";
 
 export const dynamic = "force-dynamic";
 
@@ -9,11 +10,13 @@ export async function POST(request: NextRequest) {
       name?: string;
       passcode?: string;
       startingBankroll?: number;
+      mode?: GameMode;
     };
     const result = createRoom({
       name: body.name ?? "",
       passcode: body.passcode ?? "",
       startingBankroll: body.startingBankroll,
+      mode: body.mode,
     });
     return NextResponse.json(result, { status: 201 });
   } catch (error) {

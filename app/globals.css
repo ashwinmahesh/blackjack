@@ -444,8 +444,8 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .playingCard.cardMotionDealer { animation-name: dealToDealer; }
 .playingCard.cardMotionPlayer { animation-name: dealToPlayer; }
 .playingCard.cardReveal { transform-origin: 50% 50%; animation: flipReveal .56s cubic-bezier(.3,.7,.2,1) both; }
-.roomGameScreen .playingCard { animation-duration: .28s; }
-.roomGameScreen .playingCard.cardReveal { animation-duration: .38s; }
+.roomGameScreen .playingCard { animation-duration: .44s; }
+.roomGameScreen .playingCard.cardReveal { animation-duration: .56s; }
 .playingCard.cardNoMotion { animation: none; will-change: auto; }
 .splitHands .playerHand:nth-child(2) .playingCard:last-child { animation-delay: .14s; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(-18px) rotate(-2deg); } to { opacity: 1; transform: none; } }
@@ -619,9 +619,18 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .cancelResetButton:hover { background: rgba(255,255,255,.07); }
 .confirmResetButton { border: 1px solid #e1bf79; background: linear-gradient(180deg, #d5af64, #b88d46); color: #10271f; box-shadow: inset 0 1px rgba(255,255,255,.3); }
 .confirmResetButton:hover { filter: brightness(1.08); }
-.roomSheet { width: min(450px, 100%); position: relative; padding: 31px; border: 1px solid rgba(212,174,98,.25); border-radius: 20px; background: linear-gradient(145deg, #103126, #081b15); box-shadow: 0 30px 90px rgba(0,0,0,.55); }
+.roomSheet { width: min(450px, 100%); max-height: calc(100dvh - 36px); overflow-y: auto; position: relative; padding: 31px; border: 1px solid rgba(212,174,98,.25); border-radius: 20px; background: linear-gradient(145deg, #103126, #081b15); box-shadow: 0 30px 90px rgba(0,0,0,.55); }
 .roomSheet h2 { margin: 9px 0 8px; font: 400 32px/1.1 Georgia, serif; }
 .roomSheet > p { margin: 0 0 22px; color: #a6b5ad; font-size: 13px; line-height: 1.55; }
+.roomModePicker { margin: -5px 0 19px; }
+.roomModePicker > span { display: block; margin-bottom: 8px; color: #9aaba2; font-size: 11px; font-weight: 700; }
+.roomModePicker > div { display: grid; gap: 6px; }
+.roomModePicker button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 50px; padding: 8px 10px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; background: rgba(3,16,12,.6); color: #f4f3ed; text-align: left; cursor: pointer; }
+.roomModePicker button.selected, .roomModePicker button:hover { border-color: rgba(212,174,98,.7); background: rgba(212,174,98,.13); }
+.roomModePicker button:focus-visible { outline: 2px solid #f5d18a; outline-offset: 2px; }
+.roomModePicker button > span { display: flex; flex-direction: column; gap: 2px; }
+.roomModePicker button strong { color: #f2db9f; font-size: 12px; }
+.roomModePicker button small { color: #a2b4a6; font-size: 10px; line-height: 1.3; }
 .roomSheet label { display: flex; flex-direction: column; gap: 7px; margin-bottom: 13px; }
 .roomSheet label > span { color: #9aaba2; font-size: 11px; font-weight: 700; }
 .roomSheet input { width: 100%; height: 48px; padding: 0 14px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; outline: 0; background: rgba(3,16,12,.6); color: #f4f3ed; font-size: 16px; }
