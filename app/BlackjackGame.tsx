@@ -26,12 +26,16 @@ import {
   isFreeSplit,
   isValidTokenBalance,
   MAX_SPLIT_HANDS,
+  OPENING_SIDE_BET_KEYS,
   playDealer,
   scoreHand,
+  settleBreakoutBet,
+  settleFinalSideBets,
   settleSideBets,
   SIDE_BET_LABELS,
   SHOE_SIZE,
   type GameMode,
+  type BreakoutBet,
   type SideBetKey,
   type SideBetOutcome,
   type SideBets,
@@ -53,6 +57,7 @@ type PlayerHand = {
   result?: string;
   fromSplit?: boolean;
   freeStake?: number;
+  profit?: number;
 };
 
 type GameState = {
@@ -74,6 +79,7 @@ type GameState = {
   tone: "neutral" | "win" | "loss";
   round: number;
   mode: GameMode;
+  breakoutBet: BreakoutBet;
   burnedCard: CardType;
   shoeSerial: number;
 };
@@ -83,12 +89,14 @@ type RoomPlayerView = {
   name: string;
   bankroll: number;
   bet: number;
+  breakoutBet: BreakoutBet;
   ready: boolean;
   joinedAt: number;
   hands: Array<{
     cards: CardType[];
     bet: number;
     freeStake?: number;
+    profit?: number;
     status: HandStatus;
     result?: string;
   }>;
@@ -156,6 +164,7 @@ const GAME_MODES: Array<{ id: GameMode; name: string; description: string }> = [
   { id: "classic", name: "Classic", description: "Traditional blackjack, splits and surrender" },
   { id: "doubleDownMadness", name: "Double Down Madness", description: "Start with one card, redouble and keep hitting; dealer 22 pushes" },
   { id: "freeBet", name: "Free Bet", description: "Free doubles on hard 9–11 and free non-ten splits; dealer 22 pushes" },
+  { id: "breakout", name: "Breakout", description: "Pick player, dealer, or tie; both hands play automatically" },
 ];
 const CARD_COUNT_RANKS: CardType["rank"][] = [
   "A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3", "2",
@@ -219,17 +228,28 @@ function sideBetStake(sideBets: SideBets) {
   return Object.values(sideBets).reduce((total, wager) => total + wager, 0);
 }
 
+function availableSideBetKeys(mode: GameMode, breakoutBet: BreakoutBet): SideBetKey[] {
+  if (mode === "doubleDownMadness") return ["dealerBust"];
+  if (mode === "breakout") return breakoutBet === "dealer" ? ["breakoutBonus"] : [];
+  return [...OPENING_SIDE_BET_KEYS];
+}
+
 function totalOpeningStake(mainBet: number, sideBets: SideBets, handCount: number) {
   return (mainBet + sideBetStake(sideBets)) * handCount;
 }
 
 function roundTokenTotals(
-  hands: Array<Pick<PlayerHand, "bet" | "result" | "freeStake">>,
+  hands: Array<Pick<PlayerHand, "bet" | "result" | "freeStake" | "profit">>,
   sideBetOutcomes: SideBetOutcome[],
 ) {
   let tokensWon = 0;
   let tokensLost = 0;
   for (const hand of hands) {
+    if (hand.profit !== undefined) {
+      if (hand.profit > 0) tokensWon += hand.profit;
+      else tokensLost -= hand.profit;
+      continue;
+    }
     if (hand.result === "BLACKJACK") tokensWon += hand.bet * 1.5;
     else if (hand.result === "WIN" || hand.result === "DEALER BUST") {
       tokensWon += hand.bet + (hand.freeStake ?? 0);
@@ -245,14 +265,39 @@ function roundTokenTotals(
   return { tokens_won: tokensWon, tokens_lost: tokensLost };
 }
 
+function settleBreakoutRound(state: GameState): GameState {
+  let payout = 0;
+  let netProfit = 0;
+  const finalSideBets = state.hands.map((hand) => settleFinalSideBets(hand.cards, state.dealer, state.sideBets));
+  const sideBetPayout = finalSideBets.reduce((total, result) => total + result.payout, 0);
+  const hands = state.hands.map((hand) => {
+    const outcome = settleBreakoutBet(hand.cards, state.dealer, state.breakoutBet, hand.bet);
+    payout += outcome.payout;
+    netProfit += outcome.profit;
+    return { ...hand, status: outcome.status, result: outcome.result, profit: outcome.profit };
+  });
+  return {
+    ...state,
+    hands,
+    bankroll: state.bankroll + payout + sideBetPayout,
+    roundSideBetOutcomes: finalSideBets.flatMap((result) => result.outcomes),
+    phase: "settled",
+    message: hands.length === 1 ? hands[0].result ?? "Breakout settled" : `Breakout — ${hands.filter((hand) => hand.status === "won").length} winning hands`,
+    tone: netProfit > 0 ? "win" : netProfit < 0 ? "loss" : "neutral",
+  };
+}
+
 function settleRound(state: GameState): GameState {
+  if (state.mode === "breakout") return settleBreakoutRound(state);
   const hasLiveHand = state.hands.some(
     (hand) => ["active", "standing"].includes(hand.status) && scoreHand(hand.cards).total <= 21,
   );
-  const dealerPlay = hasLiveHand
+  const dealerPlay = hasLiveHand || state.mode === "doubleDownMadness" && state.sideBets.dealerBust > 0
     ? playDealer(state.dealer, state.shoe)
     : { cards: state.dealer, shoe: state.shoe };
   const dealerScore = scoreHand(dealerPlay.cards).total;
+  const finalSideBets = state.hands.map((hand) => settleFinalSideBets(hand.cards, dealerPlay.cards, state.sideBets));
+  const sideBetPayout = finalSideBets.reduce((total, result) => total + result.payout, 0);
   let payout = 0;
   let won = 0;
   let lost = 0;
@@ -307,7 +352,8 @@ function settleRound(state: GameState): GameState {
 
   return {
     ...state,
-    bankroll: state.bankroll + payout,
+    bankroll: state.bankroll + payout + sideBetPayout,
+    roundSideBetOutcomes: [...state.roundSideBetOutcomes, ...finalSideBets.flatMap((result) => result.outcomes)],
     dealer: dealerPlay.cards,
     shoe: dealerPlay.shoe,
     hands,
@@ -459,6 +505,8 @@ function RoomPlayerSeatView({
   roomMode,
   dealIndex,
   dealPlayerCount,
+  dealExtraOffset,
+  revealComplete,
   onCardInteract,
   onSelect,
 }: {
@@ -470,6 +518,8 @@ function RoomPlayerSeatView({
   roomMode: GameMode;
   dealIndex: number;
   dealPlayerCount: number;
+  dealExtraOffset: number;
+  revealComplete: boolean;
   onCardInteract: () => void;
   onSelect?: (playerId: string) => void;
 }) {
@@ -514,8 +564,10 @@ function RoomPlayerSeatView({
                     animated
                     card={card}
                     delayMs={handIndex === 0 && player.hands.length === 1 && dealIndex >= 0 &&
-                      (roomMode === "doubleDownMadness" ? hand.cards.length === 1 : hand.cards.length === 2)
-                      ? (1 + (roomMode === "doubleDownMadness" ? dealIndex : cardIndex * (dealPlayerCount + 1) + dealIndex)) * ROOM_DEAL_DELAY
+                      (roomMode === "breakout" || (roomMode === "doubleDownMadness" ? hand.cards.length === 1 : hand.cards.length === 2))
+                      ? (roomMode === "breakout" && cardIndex >= 2
+                        ? 2 * (dealPlayerCount + 1) + 1 + dealExtraOffset + cardIndex - 2
+                        : 1 + (roomMode === "doubleDownMadness" ? dealIndex : cardIndex * (dealPlayerCount + 1) + dealIndex)) * ROOM_DEAL_DELAY
                       : 0}
                     key={card.id}
                     motion={isLocal ? "player" : undefined}
@@ -523,15 +575,17 @@ function RoomPlayerSeatView({
                   />
                 ))}
               </div>
-              <small>{roomHandTotalLabel(hand.cards)} · {hand.bet ? `bet ${tokenAmount(hand.bet)}` : `free bet ${tokenAmount(hand.freeStake ?? 0)}`}</small>
-              {hand.result ? <b className={hand.result === "BUST" ? "bust" : ""}>{hand.result}</b> : null}
+              <small>{roomMode === "breakout" && !revealComplete ? "Dealing" : roomHandTotalLabel(hand.cards)} · {roomMode === "breakout"
+                ? `${player.breakoutBet} bet ${tokenAmount(hand.bet)}`
+                : hand.bet ? `bet ${tokenAmount(hand.bet)}` : `free bet ${tokenAmount(hand.freeStake ?? 0)}`}</small>
+              {hand.result && revealComplete ? <b className={hand.result === "BUST" ? "bust" : ""}>{hand.result}</b> : null}
             </div>
           ))}
         </div>
       ) : (
         <div className="roomWaiting">
           {player.bet
-            ? `Bet ${tokenAmount(player.bet)}`
+            ? `Bet ${tokenAmount(player.bet)}${roomMode === "breakout" ? ` on ${player.breakoutBet}` : ""}`
             : canPlayNextRound
               ? roomPhase === "playing" || roomPhase === "settled" ? "Joins next round" : "Waiting for bet"
               : "Out of tokens"}
@@ -552,12 +606,15 @@ const RoomPlayerSeat = memo(RoomPlayerSeatView, (previous, next) =>
   previous.roomMode === next.roomMode &&
   previous.dealIndex === next.dealIndex &&
   previous.dealPlayerCount === next.dealPlayerCount &&
+  previous.dealExtraOffset === next.dealExtraOffset &&
+  previous.revealComplete === next.revealComplete &&
   previous.onCardInteract === next.onCardInteract &&
   previous.onSelect === next.onSelect &&
   previous.player.id === next.player.id &&
   previous.player.name === next.player.name &&
   previous.player.bankroll === next.player.bankroll &&
   previous.player.bet === next.player.bet &&
+  previous.player.breakoutBet === next.player.breakoutBet &&
   previous.player.activeHand === next.player.activeHand &&
   JSON.stringify(previous.player.hands) === JSON.stringify(next.player.hands) &&
   JSON.stringify(previous.player.sideBetResults) === JSON.stringify(next.player.sideBetResults),
@@ -624,7 +681,29 @@ function ModeIcon({ mode }: { mode: GameMode }) {
   if (mode === "doubleDownMadness") {
     return <svg viewBox="0 0 28 28" aria-hidden="true"><path d="m16 2-9 13h7l-2 11 9-14h-7l2-10Z" /></svg>;
   }
+  if (mode === "breakout") {
+    return <svg viewBox="0 0 28 28" aria-hidden="true"><path d="M4 7h20M4 21h20M7 7v14M21 7v14M14 4v20M9 13l-2 2 2 2M19 13l2 2-2 2" /></svg>;
+  }
   return <svg viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="10" /><circle cx="14" cy="14" r="7" /><path d="M14 9v10M9 14h10" /></svg>;
+}
+
+const BREAKOUT_BET_OPTIONS: Array<{ id: BreakoutBet; label: string; payout: string }> = [
+  { id: "player", label: "Player wins", payout: "1:1 · BJ 3:2" },
+  { id: "dealer", label: "Dealer wins", payout: "1:1 · BJ 3:2" },
+  { id: "tie", label: "Tie", payout: "1:1 to 25:1" },
+];
+
+function BreakoutBetPicker({ value, onChange }: { value: BreakoutBet; onChange: (bet: BreakoutBet) => void }) {
+  return (
+    <div className="breakoutBetPicker" role="group" aria-label="Breakout outcome bet">
+      {BREAKOUT_BET_OPTIONS.map((option) => (
+        <button key={option.id} type="button" className={value === option.id ? "selected" : ""}
+          aria-pressed={value === option.id} onClick={() => onChange(option.id)}>
+          <strong>{option.label}</strong><small>{option.payout}</small>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function HandValue({ cards, hidden = false }: { cards: CardType[]; hidden?: boolean }) {
@@ -746,6 +825,8 @@ export default function BlackjackGame() {
   const [roomWager, setRoomWager] = useState(10);
   const [pendingRoomAction, setPendingRoomAction] = useState<PendingRoomAction | null>(null);
   const [roomSideBets, setRoomSideBets] = useState<SideBets>({ ...EMPTY_SIDE_BETS });
+  const [roomBreakoutBet, setRoomBreakoutBet] = useState<BreakoutBet>("player");
+  const [revealedBreakoutRound, setRevealedBreakoutRound] = useState("");
   const [donationTarget, setDonationTarget] = useState<string | null>(null);
   const [donationAmount, setDonationAmount] = useState("");
   const [roomLinkCopied, setRoomLinkCopied] = useState(false);
@@ -784,6 +865,13 @@ export default function BlackjackGame() {
   const activeRoomSeatId = roomSession?.seatId;
   const activeRoomVersion = roomSession?.room.version;
   const activeRoomPhase = roomSession?.room.phase;
+  const breakoutRevealKey = roomSession?.room.mode === "breakout" && activeRoomPhase === "settled"
+    ? `${roomSession.code}:${roomSession.room.round}` : "";
+  const breakoutRevealCardCount = breakoutRevealKey && roomSession
+    ? roomSession.room.dealer.length + roomSession.room.players.reduce((total, player) =>
+      total + player.hands.reduce((handTotal, hand) => handTotal + hand.cards.length, 0), 0)
+    : 0;
+  const breakoutRevealPending = Boolean(breakoutRevealKey && revealedBreakoutRound !== breakoutRevealKey);
   const screenKey = roomSession
     ? roomSession.room.phase === "lobby" ? "lobby" : "roomGame"
     : game ? "solo" : "home";
@@ -829,6 +917,13 @@ export default function BlackjackGame() {
     const end = window.setTimeout(() => setBurnReveal((current) => current?.key === burnReveal.key ? null : current), 2300);
     return () => window.clearTimeout(end);
   }, [burnReveal]);
+
+  useEffect(() => {
+    if (!breakoutRevealKey) return;
+    const end = window.setTimeout(() => setRevealedBreakoutRound(breakoutRevealKey),
+      (breakoutRevealCardCount + 1) * ROOM_DEAL_DELAY + 650);
+    return () => window.clearTimeout(end);
+  }, [breakoutRevealKey, breakoutRevealCardCount]);
 
   const applyRoomUpdate = useCallback((nextRoom: RoomView) => {
     roomVersionReceivedAtRef.current.set(nextRoom.version, performance.now());
@@ -1335,7 +1430,8 @@ export default function BlackjackGame() {
     );
     const shuffled = nextRoom.shoeRemaining > previousRoom.shoeRemaining;
     const soundSpacing = ROOM_DEAL_DELAY;
-    const openingDeal = previousRoom.phase === "betting" && nextRoom.phase === "playing";
+    const openingDeal = previousRoom.phase === "betting" &&
+      (nextRoom.phase === "playing" || nextRoom.mode === "breakout" && nextRoom.phase === "settled");
     const dealSoundStart = openingDeal ? ROOM_DEAL_DELAY : holeRevealed ? 160 : 0;
 
     if (shuffled) playCardSound("shuffle");
@@ -1360,7 +1456,8 @@ export default function BlackjackGame() {
       (hand) => hand.result &&
         !previousResults.has(`${hand.cards.map((card) => card.id).join(",")}:${hand.result}`),
     ) ?? [];
-    const resultDelay = dealSoundStart + dealSoundCount * soundSpacing + 120;
+    const resultDelay = dealSoundStart + dealSoundCount * soundSpacing +
+      (nextRoom.mode === "breakout" ? 650 : 120);
     const previousWinningSideBets = new Set(
       previousPlayer?.sideBetResults.filter((outcome) => outcome.won)
         .map((outcome) => `${outcome.name}:${outcome.detail}:${outcome.profit}`) ?? [],
@@ -1370,7 +1467,15 @@ export default function BlackjackGame() {
         !previousWinningSideBets.has(`${outcome.name}:${outcome.detail}:${outcome.profit}`)),
     ) ?? [];
 
-    if (newResults.some((hand) => hand.result === "BLACKJACK")) {
+    if (nextRoom.mode === "breakout") {
+      if (newResults.some((hand) => hand.status === "won" && hand.result?.includes("BLACKJACK"))) {
+        window.setTimeout(() => playCardSound("blackjack"), resultDelay);
+      } else if (newResults.some((hand) => hand.status === "won")) {
+        window.setTimeout(() => playCardSound("win"), resultDelay);
+      } else if (newResults.some((hand) => hand.status === "lost")) {
+        window.setTimeout(() => playCardSound("lose"), resultDelay);
+      }
+    } else if (newResults.some((hand) => hand.result === "BLACKJACK")) {
       window.setTimeout(() => playCardSound("blackjack"), resultDelay);
     } else if (newResults.some((hand) => ["WIN", "DEALER BUST"].includes(hand.result ?? ""))) {
       window.setTimeout(() => playCardSound("win"), resultDelay);
@@ -1446,8 +1551,9 @@ export default function BlackjackGame() {
           ["active", "standing"].includes(hand.status) &&
           scoreHand(hand.cards).total <= 21,
       );
+      const resolveDealerBust = startingState!.mode === "doubleDownMadness" && startingState!.sideBets.dealerBust > 0;
 
-      while (hasLiveHand && dealerShouldHit(dealer)) {
+      while ((hasLiveHand || resolveDealerBust) && dealerShouldHit(dealer)) {
         await pause(540);
         if (cancelled) return;
         const dealtCard = draw(shoe);
@@ -1473,6 +1579,12 @@ export default function BlackjackGame() {
           ? (() => {
               const settled = settleRound({ ...current, dealer: [...dealer], shoe: [...shoe] });
               if (settled.tone === "win") window.setTimeout(() => playCardSound("win"), 120);
+              const winningSideBets = settled.roundSideBetOutcomes.filter((outcome) =>
+                outcome.won && outcome.name === SIDE_BET_LABELS.dealerBust.name);
+              if (winningSideBets.length) window.setTimeout(() => {
+                setSideBetCelebration({ id: Date.now(), outcomes: winningSideBets });
+                playCardSound("sidebet");
+              }, 450);
               return settled;
             })()
           : current,
@@ -1576,6 +1688,12 @@ export default function BlackjackGame() {
     : [];
   const roomDealtPlayers = roomSession?.room.players.filter((player) => player.hands.length > 0) ?? [];
   const roomDealIndex = new Map(roomDealtPlayers.map((player, index) => [player.id, index]));
+  const roomExtraDealOffsets = new Map<string, number>();
+  let roomExtraCardCount = 0;
+  for (const player of roomDealtPlayers) {
+    roomExtraDealOffsets.set(player.id, roomExtraCardCount);
+    roomExtraCardCount += Math.max(0, (player.hands[0]?.cards.length ?? 2) - 2);
+  }
   const leftRoomOpponents = roomOpponents.filter((_, index) => index % 2 === 0);
   const rightRoomOpponents = roomOpponents.filter((_, index) => index % 2 === 1);
   const roomActiveHand = roomPlayer?.hands[roomPlayer.activeHand];
@@ -1801,6 +1919,7 @@ export default function BlackjackGame() {
       tone: "neutral",
       round: 1,
       mode: selectedMode,
+      breakoutBet: "player",
     });
   }
 
@@ -1858,7 +1977,7 @@ export default function BlackjackGame() {
       if (context.state === "suspended") void context.resume();
     }
 
-    const emergencyShuffle = current.shoe.length < handCount * 2 + 2;
+    const emergencyShuffle = current.shoe.length < (current.mode === "breakout" ? handCount * 10 + 12 : handCount * 2 + 2);
     const freshShoe = emergencyShuffle ? createBurnedShoe(DECK_COUNT) : null;
     const shoe = freshShoe ? freshShoe.shoe : [...current.shoe];
     const playerCards: CardType[][] = Array.from({ length: handCount }, () => []);
@@ -1893,7 +2012,7 @@ export default function BlackjackGame() {
     const bet = current.currentBet;
     const openingStake = totalOpeningStake(bet, current.sideBets, handCount);
     const sideBetResults = playerCards.map((cards) =>
-      current.mode === "doubleDownMadness"
+      current.mode === "doubleDownMadness" || current.mode === "breakout"
         ? { payout: 0, outcomes: [] as SideBetOutcome[] }
         : settleSideBets(cards, dealerCards[0], current.sideBets),
     );
@@ -1952,6 +2071,74 @@ export default function BlackjackGame() {
       });
     }
 
+    if (current.mode === "breakout") {
+      const breakoutShoe = [...shoe];
+      const dealerNatural = isBlackjack(dealerCards);
+      if (!dealerNatural) {
+        for (let handIndex = 0; handIndex < handCount; handIndex += 1) {
+          if (isBlackjack(playerCards[handIndex])) continue;
+          while (dealerShouldHit(playerCards[handIndex])) {
+            await pause(DEAL_DELAY);
+            const liveState = gameRef.current;
+            if (!liveState || liveState.phase !== "dealing" || liveState.round !== dealRoundNumber) return;
+            const card = draw(breakoutShoe);
+            playerCards[handIndex].push(card);
+            playCardSound("deal");
+            setGame((latest) => latest && latest.phase === "dealing" && latest.round === dealRoundNumber
+              ? { ...latest, shoe: [...breakoutShoe], seenCardCounts: addSeenCards(latest.seenCardCounts, [card]),
+                  hands: latest.hands.map((hand, index) => index === handIndex
+                    ? { ...hand, cards: [...hand.cards, card] } : hand), message: "Breakout plays the player hand" }
+              : latest);
+          }
+        }
+      }
+
+      await pause(DEAL_DELAY);
+      if (gameRef.current?.phase !== "dealing" || gameRef.current.round !== dealRoundNumber) return;
+      playCardSound("flip");
+      setGame((latest) => latest && latest.phase === "dealing" && latest.round === dealRoundNumber
+        ? { ...latest, dealerHoleSeen: true, seenCardCounts: addSeenCards(latest.seenCardCounts, [dealerCards[1]]), message: "Dealer plays out the hand" }
+        : latest);
+
+      if (!dealerNatural && playerCards.some((cards) => !isBlackjack(cards))) {
+        while (dealerShouldHit(dealerCards)) {
+          await pause(DEAL_DELAY);
+          const liveState = gameRef.current;
+          if (!liveState || liveState.phase !== "dealing" || liveState.round !== dealRoundNumber) return;
+          const card = draw(breakoutShoe);
+          dealerCards.push(card);
+          playCardSound("deal");
+          setGame((latest) => latest && latest.phase === "dealing" && latest.round === dealRoundNumber
+            ? { ...latest, dealer: [...latest.dealer, card], shoe: [...breakoutShoe],
+                seenCardCounts: addSeenCards(latest.seenCardCounts, [card]) }
+            : latest);
+        }
+      }
+
+      await pause(280);
+      if (gameRef.current?.phase !== "dealing" || gameRef.current.round !== dealRoundNumber) return;
+      const netProfit = playerCards.reduce((total, cards) => total +
+        settleBreakoutBet(cards, dealerCards, current.breakoutBet, bet).profit, 0);
+      const breakoutBonusWins = playerCards.flatMap((cards, handIndex) =>
+        settleFinalSideBets(cards, dealerCards, current.sideBets).outcomes
+          .filter((outcome) => outcome.won)
+          .map((outcome) => ({ ...outcome,
+            name: handCount > 1 ? `Hand ${handIndex + 1} · ${outcome.name}` : outcome.name })),
+      );
+      setGame((latest) => latest && latest.phase === "dealing" && latest.round === dealRoundNumber
+        ? settleBreakoutRound({ ...latest, dealer: [...dealerCards], shoe: [...breakoutShoe],
+            hands: playerCards.map((cards) => ({ cards: [...cards], bet, status: "standing" as const })),
+            dealerHoleSeen: true, roundSideBetOutcomes: [] })
+        : latest);
+      if (netProfit > 0) playCardSound(playerCards.some(isBlackjack) ? "blackjack" : "win");
+      else if (netProfit < 0) playCardSound("lose");
+      if (breakoutBonusWins.length) window.setTimeout(() => {
+        setSideBetCelebration({ id: Date.now(), outcomes: breakoutBonusWins });
+        playCardSound("sidebet");
+      }, 450);
+      return;
+    }
+
     await pause(360);
     const naturalHands = playerCards.map((cards) => isBlackjack(cards));
     const naturalCount = naturalHands.filter(Boolean).length;
@@ -1985,6 +2172,8 @@ export default function BlackjackGame() {
         if (dealerNatural) {
           return {
             ...latest,
+            roundSideBetOutcomes: playerCards.flatMap((cards) =>
+              settleFinalSideBets(cards, dealerCards, latest.sideBets).outcomes),
             hands: playerCards.map((cards) => ({ cards, bet, status: "lost" as const, result: "DEALER BLACKJACK" })),
             dealer: dealerCards,
             dealerHoleSeen: true,
@@ -2420,6 +2609,7 @@ export default function BlackjackGame() {
       });
       setRoomWager(data.room.table.minimum);
       setRoomSideBets({ ...EMPTY_SIDE_BETS });
+      setRoomBreakoutBet("player");
       setRoomMode(null);
       if (roomMode === "join") setRoomPasscode("");
     } catch (error) {
@@ -2505,6 +2695,7 @@ export default function BlackjackGame() {
           amount,
           targetId,
           sideBets: action === "bet" ? roomSideBets : undefined,
+          breakoutBet: action === "bet" && roomSession.room.mode === "breakout" ? roomBreakoutBet : undefined,
         }),
       });
       const respondedAt = performance.now();
@@ -2743,7 +2934,7 @@ export default function BlackjackGame() {
           <div className="roomDealerArea">
             <div className="zoneLabel">
               <span>Dealer</span>
-              {roomDealerTotalLabel(roomSession.room.dealer) ? (
+              {!breakoutRevealPending && roomDealerTotalLabel(roomSession.room.dealer) ? (
                 <span className="handValue">{roomDealerTotalLabel(roomSession.room.dealer)}</span>
               ) : null}
             </div>
@@ -2751,11 +2942,15 @@ export default function BlackjackGame() {
               {roomSession.room.dealer.length ? roomSession.room.dealer.map((card, index) => (
                 <PlayingCard
                   card={card ?? undefined}
-                  delayMs={roomSession.room.phase === "settled" ? 0 : index < 2
-                    ? (1 + (roomSession.room.mode === "doubleDownMadness" && index === 1
-                      ? roomDealtPlayers.length + 1
-                      : index * (roomDealtPlayers.length + 1) + roomDealtPlayers.length)) * ROOM_DEAL_DELAY
-                    : 0}
+                  delayMs={roomSession.room.mode === "breakout"
+                    ? (index < 2
+                      ? 1 + index * (roomDealtPlayers.length + 1) + roomDealtPlayers.length
+                      : 2 * (roomDealtPlayers.length + 1) + roomExtraCardCount + index - 1) * ROOM_DEAL_DELAY
+                    : roomSession.room.phase === "settled" ? 0 : index < 2
+                      ? (1 + (roomSession.room.mode === "doubleDownMadness" && index === 1
+                        ? roomDealtPlayers.length + 1
+                        : index * (roomDealtPlayers.length + 1) + roomDealtPlayers.length)) * ROOM_DEAL_DELAY
+                      : 0}
                   hidden={!card}
                   key={card?.id ?? `hole-${index}`}
                   motion="dealer"
@@ -2766,7 +2961,9 @@ export default function BlackjackGame() {
             </div>
           </div>
 
-          <div className="roomGameMessage">{pendingRoomAction && pendingRoomAction.round === roomSession.room.round
+          <div className="roomGameMessage">{breakoutRevealPending
+            ? "Breakout is playing both hands…"
+            : pendingRoomAction && pendingRoomAction.round === roomSession.room.round
             ? pendingRoomAction.action === "bet"
               ? `Placing ${tokenAmount(pendingRoomAction.amount ?? 0)} tokens…`
               : `${pendingRoomAction.action[0].toUpperCase()}${pendingRoomAction.action.slice(1)} selected…`
@@ -2780,6 +2977,8 @@ export default function BlackjackGame() {
                   isLocal={false}
                   dealIndex={roomDealIndex.get(player.id) ?? -1}
                   dealPlayerCount={roomDealtPlayers.length}
+                  dealExtraOffset={roomExtraDealOffsets.get(player.id) ?? 0}
+                  revealComplete={!breakoutRevealPending}
                   key={player.id}
                   onCardInteract={playCardClick}
                   player={player}
@@ -2796,6 +2995,8 @@ export default function BlackjackGame() {
                 isLocal
                 dealIndex={roomDealIndex.get(roomPlayer.id) ?? -1}
                 dealPlayerCount={roomDealtPlayers.length}
+                dealExtraOffset={roomExtraDealOffsets.get(roomPlayer.id) ?? 0}
+                revealComplete={!breakoutRevealPending}
                 onCardInteract={playCardClick}
                 player={visibleRoomPlayer ?? roomPlayer}
                 tableMinimum={roomSession.room.table.minimum}
@@ -2810,6 +3011,8 @@ export default function BlackjackGame() {
                   isLocal={false}
                   dealIndex={roomDealIndex.get(player.id) ?? -1}
                   dealPlayerCount={roomDealtPlayers.length}
+                  dealExtraOffset={roomExtraDealOffsets.get(player.id) ?? 0}
+                  revealComplete={!breakoutRevealPending}
                   key={player.id}
                   onCardInteract={playCardClick}
                   player={player}
@@ -2859,9 +3062,14 @@ export default function BlackjackGame() {
                       </button>
                     ))}
                   </div>
-                  {roomSession.room.mode !== "doubleDownMadness" ? <div className="roomSideBetPicker" aria-label="Multiplayer side bets">
-                    {(Object.keys(SIDE_BET_LABELS) as SideBetKey[]).map((key) => (
+                  {roomSession.room.mode === "breakout" ? <BreakoutBetPicker value={roomBreakoutBet} onChange={(bet) => {
+                    setRoomBreakoutBet(bet);
+                    if (bet !== "dealer") setRoomSideBets((current) => ({ ...current, breakoutBonus: 0 }));
+                  }} /> : null}
+                  {availableSideBetKeys(roomSession.room.mode, roomBreakoutBet).length ? <div className="roomSideBetPicker" aria-label="Multiplayer side bets">
+                    {availableSideBetKeys(roomSession.room.mode, roomBreakoutBet).map((key) => (
                       <button type="button" key={key} className={roomSideBets[key] ? "selected" : ""}
+                        aria-label={`${SIDE_BET_LABELS[key].name}: ${roomSideBets[key]} tokens. Tap to change.`}
                         onClick={() => {
                           const choices = [0, roomSession.room.table.minimum / 2, roomSession.room.table.minimum];
                           const next = choices[(choices.indexOf(roomSideBets[key]) + 1) % choices.length];
@@ -2871,11 +3079,13 @@ export default function BlackjackGame() {
                       </button>
                     ))}
                   </div> : null}
+                  {roomSession.room.mode === "doubleDownMadness" ? <small className="sideBetPaytableHint">Dealer Bust pays 2:1 on 3–4 cards · 4:1 on 5 · 8:1 on 6 · 50:1 on 7+</small>
+                    : roomSession.room.mode === "breakout" ? <small className="sideBetPaytableHint">Breakout Bonus: both hands bust · 5:1 to 250:1 · available with Dealer wins</small> : null}
                   <div className="roomWagerSummary" aria-live="polite">
                     <ChipPile amount={roomWager} denominations={roomSession.room.table.chips} />
                     <span>
                       <small>Current bet</small>
-                      <strong>{tokenAmount(roomWager)}{roomSession.room.mode !== "doubleDownMadness" ? ` + ${tokenAmount(sideBetStake(roomSideBets))} side` : ""}</strong>
+                      <strong>{tokenAmount(roomWager)}{sideBetStake(roomSideBets) ? ` + ${tokenAmount(sideBetStake(roomSideBets))} side` : ""}</strong>
                     </span>
                   </div>
                   <button
@@ -2904,7 +3114,7 @@ export default function BlackjackGame() {
                   </> : null}
                 </div>
               ) : <strong>Waiting for {roomSession.room.players.find((player) => player.id === roomSession.room.currentPlayerId)?.name}</strong>
-            ) : isRoomHost ? (
+            ) : breakoutRevealPending ? <strong>Breakout is dealing…</strong> : isRoomHost ? (
               <button className="dealButton" type="button" onClick={() => sendRoomAction("next-round")}>
                 Open next round
               </button>
@@ -2919,7 +3129,7 @@ export default function BlackjackGame() {
           <h1>Play free blackjack online.</h1>
           <p className="welcomeTagline">Ad-free blackjack. Play without distractions</p>
           <p className="welcomeCopy">
-            Play Classic, Free Bet, or Double Down Madness solo, or join friends in a private room. Your practice-token balance stays on this device.
+            Play Classic, Free Bet, Double Down Madness, or Breakout solo, or join friends in a private room. Your practice-token balance stays on this device.
           </p>
 
           <div className="buyInCard">
@@ -3004,6 +3214,7 @@ export default function BlackjackGame() {
             <a href="/rules">Classic rules</a>
             <a href="/free-bet">Free Bet</a>
             <a href="/double-down-madness">Double Down Madness</a>
+            <a href="/breakout">Breakout</a>
             <a href="/side-bets">Side bet payouts</a>
           </nav>
           <a
@@ -3035,7 +3246,7 @@ export default function BlackjackGame() {
                 </i>
               </div>
               <div className="tableUtilityRow">
-                <StrategyAdvisor
+                {game.mode !== "breakout" ? <StrategyAdvisor
                   advice={strategyAdvice}
                   mode={game.mode}
                   open={strategyOpen}
@@ -3043,7 +3254,7 @@ export default function BlackjackGame() {
                     setCardCountOpen(false);
                     setStrategyOpen((open) => !open);
                   }}
-                />
+                /> : null}
                 <button
                   className="cardCountToggle"
                   type="button"
@@ -3156,15 +3367,19 @@ export default function BlackjackGame() {
             ) : (
               <div className="betSpot">
                 <div className="betSpotRing">
-                  <span>Bet per hand</span>
+                  <span>{game.mode === "breakout" ? `Bet on ${game.breakoutBet}` : "Bet per hand"}</span>
                   <ChipPile amount={game.currentBet} denominations={selectedTable.chips} />
                   <strong>{tokenAmount(game.currentBet)}</strong>
                   <small>
                     {game.startingHandCount} {game.startingHandCount === 1 ? "hand" : "hands"} · {tokenAmount(totalOpeningStake(game.currentBet, game.sideBets, game.startingHandCount))} total
                   </small>
                 </div>
-                {game.mode !== "doubleDownMadness" ? <div className="sideBetRow" aria-label="Side bets per hand">
-                  {(Object.keys(SIDE_BET_LABELS) as SideBetKey[]).map((key) => (
+                {game.mode === "breakout" ? <BreakoutBetPicker value={game.breakoutBet}
+                  onChange={(bet) => setGame((current) => current && current.phase === "betting"
+                    ? { ...current, breakoutBet: bet, sideBets: bet === "dealer" ? current.sideBets
+                        : { ...current.sideBets, breakoutBonus: 0 } } : current)} /> : null}
+                {availableSideBetKeys(game.mode, game.breakoutBet).length ? <div className="sideBetRow" aria-label="Side bets per hand">
+                  {availableSideBetKeys(game.mode, game.breakoutBet).map((key) => (
                     <button
                       className={game.sideBets[key] ? "selected" : ""}
                       type="button"
@@ -3176,7 +3391,9 @@ export default function BlackjackGame() {
                       <strong>{game.sideBets[key] || "—"}</strong>
                     </button>
                   ))}
-                </div> : <small className="madnessNote">Opening side bets are unavailable with the one-card deal.</small>}
+                </div> : null}
+                {game.mode === "doubleDownMadness" ? <small className="sideBetPaytableHint">Dealer Bust pays 2:1 on 3–4 cards · 4:1 on 5 · 8:1 on 6 · 50:1 on 7+</small>
+                  : game.mode === "breakout" ? <small className="sideBetPaytableHint">Breakout Bonus: both hands bust · 5:1 to 250:1 · available with Dealer wins</small> : null}
               </div>
             )}
           </div>
@@ -3264,7 +3481,7 @@ export default function BlackjackGame() {
                 <span className="dealingPulse"><i /><i /><i /></span>
                 <strong>
                   {game.phase === "dealing"
-                    ? "Dealing cards"
+                    ? game.mode === "breakout" ? "Breakout plays both hands" : "Dealing cards"
                     : game.phase === "shuffling"
                       ? `Shuffling ${DECK_COUNT} decks`
                       : "Dealer is playing"}
@@ -3493,7 +3710,8 @@ export default function BlackjackGame() {
               <div><dt>Surrender</dt><dd>Late; half the main bet returned</dd></div>
               <div><dt>Insurance</dt><dd>Not offered</dd></div>
             </dl>
-            <p>Free Bet: free doubles on two-card hard 9–11, free splits except ten-value pairs, and dealer 22 pushes standing hands. Double Down Madness: one player card to start; hit or redouble after drawing, with no splits or surrender. Dealer 22 pushes standing hands. Opening side bets are available in Classic and Free Bet.</p>
+            <p>Free Bet: free doubles on two-card hard 9–11, free splits except ten-value pairs, and dealer 22 pushes standing hands. Double Down Madness: one player card to start; hit or redouble after drawing, with no splits or surrender. Dealer 22 pushes standing hands, and the Dealer Bust side bet pays by the dealer’s card count. Breakout: choose Player, Dealer, or Tie before the deal; both hands then play automatically to hard 17 or soft 18. A Dealer wins wager can add Breakout Bonus when both hands bust. Opening-card side bets are available in Classic and Free Bet.</p>
+            <p>Breakout player and dealer wins pay 1:1, with a winning blackjack paying 3:2. Tie pays 1:1 for both busts, 3:1 for a 17–19 tie, 8:1 for 20, 15:1 for 21, and 25:1 for matching blackjacks. A dealer bet pushes when both bust or the player busts against dealer 17.</p>
             <div className="sidePaytables">
               <h3>Side bet paytables</h3>
               <div>

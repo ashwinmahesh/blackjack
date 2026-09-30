@@ -11,9 +11,14 @@ import {
   isBlackjack,
   isValidTokenBalance,
   MAX_SPLIT_HANDS,
+  OPENING_SIDE_BET_KEYS,
   playDealer,
   scoreHand,
+  settleBreakoutBet,
+  settleFinalSideBets,
   settleSideBets,
+  type BreakoutBet,
+  type SideBetKey,
   type SideBets,
   type SideBetOutcome,
   type Card,
@@ -42,6 +47,7 @@ export type RoomHand = {
   freeStake?: number;
   status: RoomHandStatus;
   result?: string;
+  profit?: number;
 };
 
 type StoredPlayer = {
@@ -50,6 +56,7 @@ type StoredPlayer = {
   name: string;
   bankroll: number;
   bet: number;
+  breakoutBet: BreakoutBet;
   ready: boolean;
   joinedAt: number;
   hands: RoomHand[];
@@ -227,13 +234,46 @@ function playablePlayers(room: StoredRoom) {
   return room.players.filter((player) => player.bet > 0 || player.bankroll >= room.table.minimum);
 }
 
+function settlePlayerFinalSideBets(room: StoredRoom, player: StoredPlayer) {
+  for (const hand of player.hands) {
+    const result = settleFinalSideBets(hand.cards, room.dealer, player.sideBets);
+    player.bankroll += result.payout;
+    player.sideBetResults.push(...result.outcomes);
+  }
+}
+
 function settleRoom(room: StoredRoom) {
+  if (room.mode === "breakout") {
+    if (!isBlackjack(room.dealer) && room.players.some((player) =>
+      player.hands.some((hand) => !isBlackjack(hand.cards)))) {
+      const dealerPlay = playDealer(room.dealer, room.shoe);
+      room.dealer = dealerPlay.cards;
+      room.shoe = dealerPlay.shoe;
+    }
+    for (const player of room.players) {
+      player.hands = player.hands.map((hand) => {
+        const result = settleBreakoutBet(hand.cards, room.dealer, player.breakoutBet, hand.bet);
+        player.bankroll += result.payout;
+        return { ...hand, status: result.status, result: result.result, profit: result.profit };
+      });
+      settlePlayerFinalSideBets(room, player);
+    }
+    const dealerTotal = scoreHand(room.dealer).total;
+    room.phase = "settled";
+    room.currentPlayerId = null;
+    room.message = isBlackjack(room.dealer) ? "Dealer blackjack"
+      : dealerTotal > 21 ? "Dealer busts — Breakout settled"
+      : `Dealer stands on ${dealerTotal} — Breakout settled`;
+    return;
+  }
+
   const hasLiveHand = room.players.some((player) =>
     player.hands.some(
       (hand) => !["busted", "surrendered", "won"].includes(hand.status),
     ),
   );
-  if (hasLiveHand) {
+  const dealerBustWagered = room.mode === "doubleDownMadness" && room.players.some((player) => player.sideBets.dealerBust > 0);
+  if (hasLiveHand || dealerBustWagered) {
     const dealerPlay = playDealer(room.dealer, room.shoe);
     room.dealer = dealerPlay.cards;
     room.shoe = dealerPlay.shoe;
@@ -257,6 +297,7 @@ function settleRoom(room: StoredRoom) {
       }
       return { ...hand, status: "lost", result: "DEALER WINS" };
     });
+    settlePlayerFinalSideBets(room, player);
   }
 
   room.phase = "settled";
@@ -305,11 +346,26 @@ function dealRoomRound(room: StoredRoom) {
   room.dealer.push(draw(room.shoe));
 
   for (const player of participating) {
-    const result = room.mode === "doubleDownMadness"
+    const result = room.mode === "doubleDownMadness" || room.mode === "breakout"
       ? { payout: 0, outcomes: [] as SideBetOutcome[] }
       : settleSideBets(player.hands[0].cards, room.dealer[0], player.sideBets);
     player.bankroll += result.payout;
     player.sideBetResults = result.outcomes;
+  }
+
+  if (room.mode === "breakout") {
+    const dealerNatural = isBlackjack(room.dealer);
+    for (const player of participating) {
+      const hand = player.hands[0];
+      if (!dealerNatural && !isBlackjack(hand.cards)) {
+        const played = playDealer(hand.cards, room.shoe);
+        hand.cards = played.cards;
+        room.shoe = played.shoe;
+      }
+      hand.status = scoreHand(hand.cards).total > 21 ? "busted" : "standing";
+    }
+    settleRoom(room);
+    return;
   }
 
   const dealerNatural = isBlackjack(room.dealer);
@@ -328,6 +384,7 @@ function dealRoomRound(room: StoredRoom) {
   }
 
   if (dealerNatural) {
+    for (const player of participating) settlePlayerFinalSideBets(room, player);
     room.phase = "settled";
     room.currentPlayerId = null;
     room.message = "Dealer blackjack";
@@ -336,6 +393,10 @@ function dealRoomRound(room: StoredRoom) {
 
   const firstPlayer = participating.find((player) => activeHands(player).length > 0);
   if (!firstPlayer) {
+    if (room.mode === "doubleDownMadness" && participating.some((player) => player.sideBets.dealerBust > 0)) {
+      settleRoom(room);
+      return;
+    }
     room.phase = "settled";
     room.currentPlayerId = null;
     room.message = "Naturals paid";
@@ -372,7 +433,7 @@ export function createRoom(input: {
   const passcode = cleanPasscode(input.passcode);
   if (name.length < 2) throw new RoomError("Enter a name with at least 2 characters", 400);
   if (passcode.length < 4) throw new RoomError("Passcode must be at least 4 characters", 400);
-  if (input.mode !== undefined && !["classic", "doubleDownMadness", "freeBet"].includes(input.mode)) {
+  if (input.mode !== undefined && !["classic", "doubleDownMadness", "freeBet", "breakout"].includes(input.mode)) {
     throw new RoomError("Choose a valid game mode", 400);
   }
 
@@ -387,6 +448,7 @@ export function createRoom(input: {
     name,
     bankroll,
     bet: 0,
+    breakoutBet: "player",
     ready: false,
     joinedAt: Date.now(),
     hands: [],
@@ -435,6 +497,7 @@ export function joinRoom(input: { code: string; name: string; passcode: string; 
     name,
     bankroll: startingBankroll(input.startingBankroll),
     bet: 0,
+    breakoutBet: "player",
     ready: false,
     joinedAt: Date.now(),
     hands: [],
@@ -483,6 +546,7 @@ export function roomAction(
   amount?: number,
   targetId?: string,
   sideBets?: SideBets,
+  breakoutBet?: BreakoutBet,
 ) {
   const room = requireRoom(code);
   const player = requirePlayer(room, playerId);
@@ -551,6 +615,7 @@ export function roomAction(
       : "No players have enough tokens for the next round";
     for (const candidate of room.players) {
       candidate.bet = 0;
+      candidate.breakoutBet = "player";
       candidate.hands = [];
       candidate.activeHand = 0;
       candidate.sideBets = { ...EMPTY_SIDE_BETS };
@@ -567,19 +632,24 @@ export function roomAction(
     if (!Number.isSafeInteger(amount)) throw new RoomError("Enter a whole token wager", 400);
     const wager = amount as number;
     const selectedSideBets = { ...EMPTY_SIDE_BETS };
+    const allowedSideBets: SideBetKey[] = room.mode === "doubleDownMadness" ? ["dealerBust"]
+      : room.mode === "breakout" ? breakoutBet === "dealer" ? ["breakoutBonus"] : []
+      : [...OPENING_SIDE_BET_KEYS];
     for (const key of Object.keys(selectedSideBets) as Array<keyof SideBets>) {
       const value = sideBets?.[key] ?? 0;
       if (!Number.isSafeInteger(value) || value < 0) throw new RoomError("Invalid side bet", 400);
+      if (value > 0 && !allowedSideBets.includes(key)) throw new RoomError("Side bet unavailable for this wager", 400);
       selectedSideBets[key] = value;
     }
     const totalStake = wager + Object.values(selectedSideBets).reduce((sum, value) => sum + value, 0);
-    if (room.mode === "doubleDownMadness" && totalStake !== wager) {
-      throw new RoomError("Side bets are unavailable in Double Down Madness", 400);
+    if (room.mode === "breakout" && !["player", "dealer", "tie"].includes(breakoutBet ?? "")) {
+      throw new RoomError("Choose a Breakout outcome", 400);
     }
     if (wager < room.table.minimum) throw new RoomError(`Minimum bet is ${room.table.minimum}`, 400);
     if (totalStake > player.bankroll) throw new RoomError("Not enough tokens", 409);
     if (player.bet > 0) throw new RoomError("Bet already placed", 409);
     player.bet = wager;
+    player.breakoutBet = room.mode === "breakout" ? breakoutBet! : "player";
     player.sideBets = selectedSideBets;
     player.sideBetResults = [];
     player.bankroll -= totalStake;

@@ -7,17 +7,17 @@ const GOOGLE_ANALYTICS_ID = "G-RMTSSXD4LY";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "Play Free Blackjack Online | Classic, Free Bet & Multiplayer",
+  title: "Play Free Blackjack Online | Classic, Breakout & Multiplayer",
   applicationName: "Ashwin's Blackjack",
-  description: "Play free six-deck blackjack with friends or solo. Try Classic, Free Bet, and Double Down Madness with side bets, practice tokens, and no ads.",
-  keywords: ["free blackjack online", "multiplayer blackjack", "free bet blackjack", "double down madness", "blackjack side bets", "practice blackjack"],
+  description: "Play free six-deck blackjack with friends or solo. Try Classic, Breakout, Free Bet, and Double Down Madness with practice tokens and no ads.",
+  keywords: ["free blackjack online", "multiplayer blackjack", "breakout blackjack", "free bet blackjack", "double down madness", "blackjack side bets", "practice blackjack"],
   robots: { index: true, follow: true },
   alternates: { canonical: `${SITE_URL}/` },
   openGraph: {
     type: "website",
     url: `${SITE_URL}/`,
     title: "Ashwin's Blackjack | Free Blackjack Online",
-    description: "Ad-free blackjack with private multiplayer rooms, side bets, and three game modes.",
+    description: "Ad-free blackjack with private multiplayer rooms, side bets, and four game modes.",
     siteName: "Ashwin's Blackjack",
   },
   twitter: { card: "summary_large_image", title: "Ashwin's Blackjack", description: "Play free blackjack online with friends or solo." },

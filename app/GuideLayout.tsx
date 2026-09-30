@@ -5,6 +5,7 @@ const guides = [
   { href: "/rules", label: "Classic rules" },
   { href: "/free-bet", label: "Free Bet" },
   { href: "/double-down-madness", label: "Double Down Madness" },
+  { href: "/breakout", label: "Breakout" },
   { href: "/side-bets", label: "Side bet payouts" },
 ];
 

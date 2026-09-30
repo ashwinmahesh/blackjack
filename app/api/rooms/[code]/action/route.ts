@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { roomAction, RoomError } from "../../../../../lib/server/rooms";
-import type { SideBets } from "../../../../../lib/blackjack";
+import type { BreakoutBet, SideBets } from "../../../../../lib/blackjack";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +20,12 @@ export async function POST(
       amount?: number;
       targetId?: string;
       sideBets?: SideBets;
+      breakoutBet?: BreakoutBet;
     };
     if (!body.action || !ACTIONS.includes(body.action)) {
       return NextResponse.json({ error: "Unknown room action" }, { status: 400 });
     }
-    const room = roomAction(code, body.playerId ?? "", body.action, body.amount, body.targetId, body.sideBets);
+    const room = roomAction(code, body.playerId ?? "", body.action, body.amount, body.targetId, body.sideBets, body.breakoutBet);
     return NextResponse.json({ room });
   } catch (error) {
     const status = error instanceof RoomError ? error.status : 500;

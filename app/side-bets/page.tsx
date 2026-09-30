@@ -4,7 +4,7 @@ import { guideMetadata } from "../../lib/seo";
 
 export const metadata: Metadata = guideMetadata(
   "Blackjack Side Bet Payouts | Ashwin's Blackjack",
-  "See the Perfect Pairs, 21+3, Match the Dealer, and Top 3 side bet paytables in Ashwin's Blackjack, including 270:1 suited trips.",
+  "See blackjack side bet payouts for Perfect Pairs, 21+3, Match the Dealer, Top 3, Dealer Bust, and Breakout Bonus.",
   "/side-bets",
 );
 
@@ -17,7 +17,7 @@ const paytables = [
 
 export default function SideBetsPage() {
   return (
-    <GuideLayout eyebrow="Table guide · Side bets" title="Blackjack side bet payouts" intro="Side bets are optional wagers on the opening cards. They settle separately from your main hand in Classic and Free Bet, including private multiplayer rooms.">
+    <GuideLayout eyebrow="Table guide · Side bets" title="Blackjack side bet payouts" intro="These opening-card side bets settle separately from your main hand in Classic and Free Bet, including private multiplayer rooms.">
       {paytables.map((table) => (
         <section key={table.name}>
           <h2>{table.name}</h2>
@@ -27,7 +27,7 @@ export default function SideBetsPage() {
           </tbody></table>
         </section>
       ))}
-      <section><h2>When can I place them?</h2><p>Choose side bets before the opening deal. Double Down Madness starts the player with one card, so these opening-card bets are unavailable in that mode. All payouts shown are profit odds on practice-token wagers.</p></section>
+      <section><h2>Other modes</h2><p>Double Down Madness offers a <a href="/double-down-madness">Dealer Bust side bet</a>. Breakout offers <a href="/breakout">Breakout Bonus</a> with a Dealer wins wager. Both settle after the dealer plays. All payouts shown are profit odds on practice-token wagers.</p></section>
     </GuideLayout>
   );
 }
