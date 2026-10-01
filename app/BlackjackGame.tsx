@@ -3222,14 +3222,14 @@ export default function BlackjackGame() {
             ) : roomSession.room.phase === "playing" ? (
               pendingRoomAction ? <strong>{pendingRoomAction.action} selected — confirming with the table…</strong> : isRoomTurn ? (
                 <div className={`playControls roomPlayControls${roomSession.room.mode === "doubleDownMadness" ? " madnessControls" : roomSession.room.mode === "doubleUp" ? " doubleUpControls" : ""}`}>
-                  <button type="button" onClick={() => sendRoomAction("stand")}><small>S</small><span>Stand</span></button>
+                  {roomSession.room.mode === "doubleUp" ? <button className="doubleUpAction" type="button" onClick={() => sendRoomAction("double-up")} disabled={!roomDoubleUpAvailable}>
+                    <small>UP</small><span>Double Up</span>
+                  </button> : <button type="button" onClick={() => sendRoomAction("stand")}><small>S</small><span>Stand</span></button>}
                   <button className="primaryAction" type="button" onClick={() => sendRoomAction("hit")} disabled={roomSession.room.mode === "doubleUp" && roomActiveHand?.splitAces}><small>H</small><span>Hit</span></button>
+                  {roomSession.room.mode === "doubleUp" ? <button type="button" onClick={() => sendRoomAction("stand")}><small>S</small><span>Stand</span></button> : null}
                   <button type="button" onClick={() => sendRoomAction("double")} disabled={!roomDoubleAvailable}>
                     <small>2×</small><span>{roomSession.room.mode === "freeBet" && roomActiveHand && isFreeDouble(roomActiveHand.cards) ? "Free double" : "Double"}</span>
                   </button>
-                  {roomSession.room.mode === "doubleUp" ? <button type="button" onClick={() => sendRoomAction("double-up")} disabled={!roomDoubleUpAvailable}>
-                    <small>UP</small><span>Double Up</span>
-                  </button> : null}
                   {roomSession.room.mode !== "doubleDownMadness" ? <>
                     <button type="button" onClick={() => sendRoomAction("split")} disabled={!roomSplitAvailable}>
                       <small>Ⅱ</small><span>{roomSession.room.mode === "freeBet" && roomActiveHand && isFreeSplit(roomActiveHand.cards) ? "Free split" : "Split"}</span>
@@ -3574,12 +3574,17 @@ export default function BlackjackGame() {
               </div>
             ) : game.phase === "playing" ? (
               <div className={`playControls${game.mode === "doubleDownMadness" ? " madnessControls" : game.mode === "doubleUp" ? " doubleUpControls" : ""}`}>
-                <button className="secondaryAction" type="button" onClick={stand}>
+                {game.mode === "doubleUp" ? <button className="doubleUpAction" type="button" onClick={doubleUp} disabled={!canDoubleUp}>
+                  <small>UP</small><span>Double Up</span>
+                </button> : <button className="secondaryAction" type="button" onClick={stand}>
                   <small>S</small><span>Stand</span>
-                </button>
+                </button>}
                 <button className="primaryAction" type="button" onClick={hit} disabled={game.mode === "doubleUp" && activeHand?.splitAces}>
                   <small>H</small><span>Hit</span>
                 </button>
+                {game.mode === "doubleUp" ? <button className="secondaryAction" type="button" onClick={stand}>
+                  <small>S</small><span>Stand</span>
+                </button> : null}
                 <button className="secondaryAction" type="button" onClick={doubleDown} disabled={!canDouble}>
                   <small>2×</small><span>{game.mode === "freeBet" && activeHand && isFreeDouble(activeHand.cards)
                     ? "Free double"
@@ -3587,9 +3592,6 @@ export default function BlackjackGame() {
                       ? "Double · 1 card"
                       : "Double"}</span>
                 </button>
-                {game.mode === "doubleUp" ? <button className="secondaryAction" type="button" onClick={doubleUp} disabled={!canDoubleUp}>
-                  <small>UP</small><span>Double Up</span>
-                </button> : null}
                 {game.mode !== "doubleDownMadness" ? <><button
                   className="secondaryAction"
                   type="button"

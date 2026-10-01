@@ -575,6 +575,9 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .playControls button span { text-transform: uppercase; letter-spacing: .06em; font-size: 13px; font-weight: 800; }
 .playControls .primaryAction { background: linear-gradient(180deg, #d5af64, #b88d46); color: #10271f; border-color: #e1bf79; }
 .playControls .primaryAction small { color: #193026; border-color: rgba(16,39,31,.28); }
+.playControls .doubleUpAction { background: linear-gradient(180deg, #80e1c5, #2b9a7f); color: #072b24; border-color: #a0f1d9; box-shadow: 0 5px 18px rgba(58,198,158,.3), inset 0 1px rgba(255,255,255,.35); }
+.playControls .doubleUpAction small { color: #063c2e; border-color: rgba(7,43,36,.4); }
+.playControls .doubleUpAction:not(:disabled):hover { background: linear-gradient(180deg, #a0f1d9, #41b595); }
 .settledControls { justify-content: flex-end; }
 .sessionChange { margin-right: auto; display: flex; flex-direction: column; padding-left: 9px; }
 .sessionChange small { color: #aebdb5; font-size: 12px; text-transform: uppercase; letter-spacing: .09em; }
@@ -816,6 +819,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .playControls.doubleUpControls button { gap: 4px; }
   .playControls.doubleUpControls button small { width: 21px; height: 21px; font-size: 9px; }
   .playControls.doubleUpControls button span { font-size: 10px; }
+  .playControls.doubleUpControls .doubleUpAction span { font-size: 12px; }
   .playControls button small { width: 25px; height: 25px; font-size: 11px; }
   .playControls button span { font-size: 12px; letter-spacing: .035em; }
   .rulesSheet { padding: 28px 23px; }
