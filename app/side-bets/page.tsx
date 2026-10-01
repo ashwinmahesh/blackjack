@@ -4,7 +4,7 @@ import { guideMetadata } from "../../lib/seo";
 
 export const metadata: Metadata = guideMetadata(
   "Blackjack Side Bet Payouts | Ashwin's Blackjack",
-  "See blackjack side bet payouts for Perfect Pairs, 21+3, Match the Dealer, Top 3, Dealer Bust, and Breakout Bonus.",
+  "See blackjack side bet payouts for Perfect Pairs, 21+3, Match the Dealer, Top 3, Dealer Bust, Bonus 16, Breakout Tie, and Breakout Bonus.",
   "/side-bets",
 );
 
@@ -27,7 +27,7 @@ export default function SideBetsPage() {
           </tbody></table>
         </section>
       ))}
-      <section><h2>Other modes</h2><p>Double Down Madness offers a <a href="/double-down-madness">Dealer Bust side bet</a>. Breakout offers <a href="/breakout">Breakout Bonus</a> with a Dealer wins wager. Both settle after the dealer plays. All payouts shown are profit odds on practice-token wagers.</p></section>
+      <section><h2>Other modes</h2><p>Double Down Madness offers a <a href="/double-down-madness">Dealer Bust side bet</a>. Double Up offers <a href="/double-up">Bonus 16</a>, which pays when the dealer stops at 16. Breakout offers a 15:1 <a href="/breakout">Tie side bet</a> and Breakout Bonus with either main wager. These settle after the dealer plays. All payouts shown are profit odds on practice-token wagers.</p></section>
     </GuideLayout>
   );
 }

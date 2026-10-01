@@ -4,9 +4,9 @@ import type { BreakoutBet, SideBets } from "../../../../../lib/blackjack";
 
 export const dynamic = "force-dynamic";
 
-type RoomAction = "bet" | "hit" | "stand" | "double" | "split" | "surrender" | "next-round" | "donate" | "leave" | "kick";
+type RoomAction = "bet" | "hit" | "stand" | "double" | "double-up" | "split" | "surrender" | "next-round" | "donate" | "leave" | "kick";
 
-const ACTIONS: RoomAction[] = ["bet", "hit", "stand", "double", "split", "surrender", "next-round", "donate", "leave", "kick"];
+const ACTIONS: RoomAction[] = ["bet", "hit", "stand", "double", "double-up", "split", "surrender", "next-round", "donate", "leave", "kick"];
 
 export async function POST(
   request: NextRequest,

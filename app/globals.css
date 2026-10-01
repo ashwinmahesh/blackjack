@@ -277,6 +277,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomLocalHands { max-width: 100%; gap: clamp(8px, 2vw, 22px); margin-top: 10px; padding: 5px 8px 8px; }
 .roomLocalHands:is([data-hand-count="2"], [data-hand-count="3"], [data-hand-count="4"], [data-hand-count="5"]) { width: 100%; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: start; row-gap: 20px; }
 .roomLocalHands[data-hand-count="2"] .roomHand { grid-column: span 3; }
+.roomLocalHands[data-hand-count="2"] { column-gap: clamp(24px, 4vw, 48px); }
 .roomLocalHands:is([data-hand-count="3"], [data-hand-count="4"], [data-hand-count="5"]) .roomHand { grid-column: span 2; }
 .roomLocalHands[data-hand-count="4"] .roomHand:nth-child(4) { grid-column: 3 / span 2; }
 .roomLocalHands[data-hand-count="5"] .roomHand:nth-child(4) { grid-column: 2 / span 2; }
@@ -318,7 +319,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .roomSideBetPicker b { margin-left: 4px; }
 .sideBetPaytableHint { display: block; max-width: min(480px, calc(100vw - 24px)); color: #b5c3b7; font-size: 10px; line-height: 1.35; text-align: center; }
 .roomGameControls > .sideBetPaytableHint { width: 100%; max-width: none; }
-.breakoutBetPicker { width: min(440px, calc(100vw - 26px)); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.breakoutBetPicker { width: min(440px, calc(100vw - 26px)); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .roomGameControls > .breakoutBetPicker { width: 100%; }
 .breakoutBetPicker button { min-width: 0; min-height: 57px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 7px 5px; border: 1px solid rgba(255,255,255,.14); border-radius: 10px; background: rgba(4,18,14,.78); color: #b2c2b7; cursor: pointer; text-align: center; }
 .breakoutBetPicker button.selected { border-color: #e0b96d; background: linear-gradient(155deg, rgba(212,174,98,.22), rgba(10,53,38,.84)); color: #ffe5a5; box-shadow: inset 0 1px rgba(255,255,255,.08), 0 0 14px rgba(212,174,98,.11); }
@@ -464,7 +465,7 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
 .playingCard.cardNoMotion { animation: none; will-change: auto; }
 .splitHands .playerHand:nth-child(2) .playingCard:last-child { animation-delay: .14s; }
 @keyframes cardIn { from { opacity: 0; transform: translateY(-18px) rotate(-2deg); } to { opacity: 1; transform: none; } }
-@keyframes dealToDealer { from { opacity: .25; transform: translate(150px, -70px) rotate(10deg) scale(.92); } to { opacity: 1; transform: none; } }
+@keyframes dealToDealer { from { opacity: 0; transform: translate(150px, -70px) rotate(10deg) scale(.92); } to { opacity: 1; transform: none; } }
 @keyframes dealToPlayer { from { opacity: .25; transform: translate(165px, -180px) rotate(13deg) scale(.92); } to { opacity: 1; transform: none; } }
 @keyframes flipReveal { 0% { opacity: .5; transform: perspective(500px) rotateY(-90deg) scale(.96); } 60% { transform: perspective(500px) rotateY(8deg) scale(1.02); } 100% { opacity: 1; transform: perspective(500px) rotateY(0) scale(1); } }
 .cardFace { background: linear-gradient(140deg, #fffef9, #e9e6dd); color: #151a17; border: 1px solid rgba(0,0,0,.14); }
@@ -739,10 +740,14 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .roomLocalPlayer .roomPlayerIdentity small { font-size: 7px; }
   .roomLocalPlayer .roomPlayerBalance { font-size: 9px; }
   .roomLocalHands { column-gap: 4px; row-gap: 18px; margin-top: 8px; }
+  .roomLocalHands[data-hand-count="2"] { column-gap: 16px; }
+  .roomLocalHands[data-hand-count="2"] .roomLocalCardFan { padding-left: 36px; }
+  .roomLocalHands[data-hand-count="2"] .roomLocalCardFan .playingCard { width: clamp(56px, 16vw, 72px); margin-left: -36px; }
+  .roomLocalHands:is([data-hand-count="3"], [data-hand-count="4"], [data-hand-count="5"]) { column-gap: 10px; }
+  .roomLocalHands[data-hand-count="3"] .roomLocalCardFan .playingCard { width: clamp(48px, 13vw, 58px); margin-left: -38px; }
   .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .playingCard { width: clamp(50px, 14vw, 61px); }
   .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .roomLocalCardFan { min-height: 75px; }
-  .roomLocalHands[data-hand-count="3"] .roomLocalCardFan { padding-left: 42px; }
-  .roomLocalHands[data-hand-count="3"] .roomLocalCardFan .playingCard { margin-left: -42px; }
+  .roomLocalHands[data-hand-count="3"] .roomLocalCardFan { padding-left: 38px; }
   .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .roomLocalCardFan { padding-left: 38px; }
   .roomLocalHands:is([data-hand-count="4"], [data-hand-count="5"]) .roomLocalCardFan .playingCard { margin-left: -38px; }
   .roomLocalCardFan { min-height: 128px; padding-left: 15px; }
@@ -808,6 +813,9 @@ button:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3p
   .playControls button:nth-child(n+3) { grid-column: span 2; }
   .playControls.madnessControls { grid-template-columns: repeat(3, minmax(0, 1fr)); min-height: 68px; }
   .playControls.madnessControls button { grid-column: auto; }
+  .playControls.doubleUpControls button { gap: 4px; }
+  .playControls.doubleUpControls button small { width: 21px; height: 21px; font-size: 9px; }
+  .playControls.doubleUpControls button span { font-size: 10px; }
   .playControls button small { width: 25px; height: 25px; font-size: 11px; }
   .playControls button span { font-size: 12px; letter-spacing: .035em; }
   .rulesSheet { padding: 28px 23px; }

@@ -32,11 +32,11 @@ export type HandScore = {
 export const DECK_COUNT = 6;
 export const SHOE_SIZE = DECK_COUNT * 52;
 export const MAX_SPLIT_HANDS = 5;
-export type GameMode = "classic" | "doubleDownMadness" | "freeBet" | "breakout";
-export type BreakoutBet = "player" | "dealer" | "tie";
+export type GameMode = "classic" | "doubleDownMadness" | "freeBet" | "breakout" | "doubleUp";
+export type BreakoutBet = "player" | "dealer";
 export const OPENING_SIDE_BET_KEYS = ["perfectPairs", "twentyOnePlusThree", "matchDealer", "topThree"] as const;
 export type OpeningSideBetKey = (typeof OPENING_SIDE_BET_KEYS)[number];
-export type SideBetKey = OpeningSideBetKey | "dealerBust" | "breakoutBonus";
+export type SideBetKey = OpeningSideBetKey | "dealerBust" | "bonus16" | "breakoutTie" | "breakoutBonus";
 export type SideBets = Record<SideBetKey, number>;
 export const EMPTY_SIDE_BETS: SideBets = {
   perfectPairs: 0,
@@ -44,6 +44,8 @@ export const EMPTY_SIDE_BETS: SideBets = {
   matchDealer: 0,
   topThree: 0,
   dealerBust: 0,
+  bonus16: 0,
+  breakoutTie: 0,
   breakoutBonus: 0,
 };
 export const SIDE_BET_LABELS: Record<SideBetKey, { name: string; short: string }> = {
@@ -52,6 +54,8 @@ export const SIDE_BET_LABELS: Record<SideBetKey, { name: string; short: string }
   matchDealer: { name: "Match the Dealer", short: "Match" },
   topThree: { name: "Top 3", short: "Top 3" },
   dealerBust: { name: "Dealer Bust", short: "Bust" },
+  bonus16: { name: "Bonus 16", short: "16" },
+  breakoutTie: { name: "Tie", short: "Tie" },
   breakoutBonus: { name: "Breakout Bonus", short: "Bonus" },
 };
 
@@ -121,7 +125,7 @@ export type SideBetOutcome = {
   profit: number;
 };
 
-export type BasicStrategyMove = "Hit" | "Stand" | "Double" | "Free double" | "Split" | "Free split" | "Surrender";
+export type BasicStrategyMove = "Hit" | "Stand" | "Double" | "Double Up" | "Free double" | "Split" | "Free split" | "Surrender";
 
 export type BasicStrategyAdvice = {
   move: BasicStrategyMove;
@@ -346,6 +350,60 @@ function strategyHandLabel(cards: Card[]): string {
 }
 
 const STRATEGY_DEALER_VALUES = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+
+// Six-deck H17 Double Up strategy chart by Michael Shackleford.
+// U = Double Up; D = double or hit; T = double or stand; P = split.
+// https://wizardofodds.com/games/double-up-blackjack/
+const DOUBLE_UP_HARD: Record<number, string> = {
+  9: "HHDDHHHHHH", 10: "DDDDDDDHHH", 11: "DDDDDDDDDD",
+  12: "HHSSSHHHHH", 13: "SSSSSHHHHH", 14: "SSSSSHHHHH",
+  15: "SSSSSHHHHH", 16: "SSSSSHHHHH", 17: "SSSSSSSSSS",
+  18: "SSSUSUSSSS", 19: "UUUUUUUSSS", 20: "UUUUUUUUUU",
+};
+const DOUBLE_UP_SOFT: Record<number, string> = {
+  14: "HHHDHHHHHH", 15: "HHHDHHHHHH", 16: "HHHDHHHHHH",
+  17: "HHDDDHHHHH", 18: "STTTTUSHHH", 19: "UUUUUUUSSS",
+  20: "UUUUUUUUUU",
+};
+const DOUBLE_UP_PAIRS: Record<string, string> = {
+  "2": "HPPPPPHHHH", "3": "HHPPPPHHHH", "4": "HHHHHHHHHH",
+  "5": "DDDDDDDHHH", "6": "HPPPPPHHHH", "7": "PPPPPPHHHH",
+  "8": "PPPPPPPPHH", "9": "PPPPPPPPSS", "10": "UUUUUUUUUU",
+  "A": "PPPPPPPPPP",
+};
+
+export function getDoubleUpStrategyAdvice(
+  cards: Card[], dealerUpCard: Card,
+  options: { allowDouble: boolean; allowDoubleUp: boolean; allowSplit: boolean; splitAces?: boolean },
+): BasicStrategyAdvice {
+  const dealer = strategyDealerValue(dealerUpCard);
+  const dealerIndex = STRATEGY_DEALER_VALUES.indexOf(dealer as (typeof STRATEGY_DEALER_VALUES)[number]);
+  const score = scoreHand(cards);
+  const handLabel = strategyHandLabel(cards);
+  const pairRank = cards.length === 2 && canSplit(cards)
+    ? ["10", "J", "Q", "K"].includes(cards[0].rank) ? "10" : cards[0].rank : null;
+  let cell = options.splitAces
+    ? score.total >= 20 || score.total === 19 && dealer <= 8 || score.total === 18 && (dealer === 5 || dealer === 7)
+      ? "U" : "S"
+    : pairRank && options.allowSplit ? DOUBLE_UP_PAIRS[pairRank]?.[dealerIndex]
+    : score.isSoft ? DOUBLE_UP_SOFT[score.total]?.[dealerIndex]
+      : DOUBLE_UP_HARD[score.total]?.[dealerIndex];
+  if (!cell) cell = score.total >= 17 ? "S" : "H";
+  if (cell === "P" && !options.allowSplit) cell = score.isSoft
+    ? DOUBLE_UP_SOFT[score.total]?.[dealerIndex] ?? "H"
+    : DOUBLE_UP_HARD[score.total]?.[dealerIndex] ?? "H";
+  if (cell === "U" && !options.allowDoubleUp) cell = "S";
+  if ((cell === "D" || cell === "T") && !options.allowDouble) cell = cell === "T" ? "S" : "H";
+  const move: BasicStrategyMove = cell === "P" ? "Split" : cell === "U" ? "Double Up"
+    : cell === "D" || cell === "T" ? "Double" : cell === "S" ? "Stand" : "Hit";
+  const explanation = move === "Double Up"
+    ? `Add an equal wager and stand on ${handLabel.toLowerCase()} against dealer ${dealerUpCard.rank}.`
+    : move === "Split" ? `Split ${handLabel.toLowerCase()} against dealer ${dealerUpCard.rank}.`
+    : move === "Double" ? `Double for one card against dealer ${dealerUpCard.rank}.`
+    : move === "Stand" ? `Stand against dealer ${dealerUpCard.rank}; dealer 16 pushes live hands below 21.`
+    : `Draw against dealer ${dealerUpCard.rank}; dealer 16 pushes live hands below 21.`;
+  return { move, handLabel, explanation, ...(move === "Double" ? { fallback: cell === "T" ? "Stand" as const : "Hit" as const } : {}) };
+}
 
 // Michael Shackleford's six-deck, H17, push-22 Double Down Madness strategy.
 // https://wizardofodds.com/games/blackjack/double-down-madness/
@@ -590,12 +648,30 @@ export function scoreDealerBust(dealerCards: Card[]): SideBetResult | null {
   return { label: `${count}-card dealer bust`, payout };
 }
 
+// Nevada's published Bonus 16 paytable 2. The dealer stops at hard or soft 16.
+export function scoreBonus16(dealerCards: Card[]): SideBetResult | null {
+  if (scoreHand(dealerCards).total !== 16) return null;
+  const count = dealerCards.length;
+  const payout = count >= 7 ? 500 : count === 6 ? 100 : count === 5 ? 50
+    : count === 4 ? 10 : count === 3 ? 5 : 4;
+  return { label: `${count}-card dealer 16`, payout };
+}
+
 export function scoreBreakoutBonus(playerCards: Card[], dealerCards: Card[]): SideBetResult | null {
   if (scoreHand(playerCards).total <= 21 || scoreHand(dealerCards).total <= 21) return null;
   const count = playerCards.length + dealerCards.length;
   const payout = count >= 12 ? 250 : count === 11 ? 150 : count === 10 ? 100
     : count === 9 ? 30 : count === 8 ? 15 : 5;
   return { label: `Both bust · ${count} cards`, payout };
+}
+
+export function scoreBreakoutTie(playerCards: Card[], dealerCards: Card[]): SideBetResult | null {
+  const playerTotal = scoreHand(playerCards).total;
+  const dealerTotal = scoreHand(dealerCards).total;
+  if (playerTotal > 21 && dealerTotal > 21) return { label: "Both bust", payout: 15 };
+  if (playerTotal !== dealerTotal || playerTotal > 21) return null;
+  return { label: isBlackjack(playerCards) && isBlackjack(dealerCards)
+    ? "Blackjack tie" : `Tie on ${playerTotal}`, payout: 15 };
 }
 
 export function settleFinalSideBets(
@@ -605,9 +681,11 @@ export function settleFinalSideBets(
 ) {
   const results = {
     dealerBust: scoreDealerBust(dealerCards),
+    bonus16: scoreBonus16(dealerCards),
+    breakoutTie: scoreBreakoutTie(playerCards, dealerCards),
     breakoutBonus: scoreBreakoutBonus(playerCards, dealerCards),
   };
-  return (["dealerBust", "breakoutBonus"] as const).reduce(
+  return (["dealerBust", "bonus16", "breakoutTie", "breakoutBonus"] as const).reduce(
     (outcome, key) => {
       const wager = sideBets[key];
       if (!wager) return outcome;
@@ -629,6 +707,46 @@ export function settleFinalSideBets(
 export function dealerShouldHit(cards: Card[]): boolean {
   const score = scoreHand(cards);
   return score.total < 17 || (score.total === 17 && score.isSoft);
+}
+
+export function doubleUpDealerShouldHit(cards: Card[]): boolean {
+  const score = scoreHand(cards);
+  return score.total !== 16 && (score.total < 17 || score.total === 17 && score.isSoft);
+}
+
+export function playDoubleUpDealer(startingCards: Card[], startingShoe: Card[]) {
+  const cards = [...startingCards];
+  const shoe = [...startingShoe];
+  while (doubleUpDealerShouldHit(cards)) {
+    const card = shoe.pop();
+    if (!card) break;
+    cards.push(card);
+  }
+  return { cards, shoe };
+}
+
+export function settleDoubleUpHand(playerCards: Card[], dealerCards: Card[], mainBet: number, doubleUpStake = 0) {
+  const playerTotal = scoreHand(playerCards).total;
+  const dealerTotal = scoreHand(dealerCards).total;
+  const totalStake = mainBet + doubleUpStake;
+  if (playerTotal > 21) return { status: "lost" as const, result: "BUST", payout: 0, profit: -totalStake };
+  if (dealerTotal === 16) {
+    if (playerTotal === 21) return { status: "won" as const, result: "WIN ON 16", payout: 2 * totalStake, profit: totalStake };
+    return { status: "push" as const, result: "PUSH 16", payout: totalStake, profit: 0 };
+  }
+  if (playerTotal === dealerTotal) return {
+    status: "push" as const,
+    result: doubleUpStake ? "PUSH · UP LOST" : "PUSH",
+    payout: mainBet,
+    profit: -doubleUpStake,
+  };
+  if (dealerTotal > 21 || playerTotal > dealerTotal) return {
+    status: "won" as const,
+    result: dealerTotal > 21 ? "DEALER BUST" : "WIN",
+    payout: 2 * totalStake,
+    profit: totalStake,
+  };
+  return { status: "lost" as const, result: "DEALER WINS", payout: 0, profit: -totalStake };
 }
 
 export function playDealer(
@@ -654,8 +772,8 @@ export type BreakoutSettlement = {
   profit: number;
 };
 
-// Payout includes the original stake. Tie payouts follow the Super Tie paytable;
-// dealer-win special pushes follow Breakout Blackjack's published rules.
+// Payout includes the original stake. Dealer-win special pushes follow
+// Breakout Blackjack's published rules; Tie is a separate side bet.
 export function settleBreakoutBet(
   playerCards: Card[],
   dealerCards: Card[],
@@ -681,17 +799,7 @@ export function settleBreakoutBet(
   let status: BreakoutSettlement["status"] = "lost";
   let result = outcome;
 
-  if (bet === "tie") {
-    const tieOdds = playerBlackjack && dealerBlackjack ? 25
-      : bothBust ? 1
-      : sameTotal && !playerBlackjack && !dealerBlackjack
-        ? playerTotal === 21 ? 15 : playerTotal === 20 ? 8 : playerTotal >= 17 ? 3 : 0
-      : 0;
-    if (tieOdds > 0) {
-      profit = stake * tieOdds;
-      status = "won";
-    }
-  } else if (playerBlackjack && dealerBlackjack || sameTotal && playerBlackjack === dealerBlackjack || bet === "dealer" && bothBust) {
+  if (playerBlackjack && dealerBlackjack || sameTotal && playerBlackjack === dealerBlackjack || bet === "dealer" && bothBust) {
     profit = 0;
     status = "push";
   } else if (bet === "dealer" && playerTotal > 21 && dealerTotal === 17) {

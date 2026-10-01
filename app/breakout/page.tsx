@@ -3,27 +3,27 @@ import GuideLayout from "../GuideLayout";
 import { guideMetadata } from "../../lib/seo";
 
 export const metadata: Metadata = guideMetadata(
-  "Breakout Blackjack Rules & Tie Payouts | Ashwin's Blackjack",
-  "Play Breakout blackjack with practice tokens. Bet on the player, the dealer, or a tie, and see Breakout Bonus and tie payouts.",
+  "Breakout Blackjack Rules & Side Bet Payouts | Ashwin's Blackjack",
+  "Play Breakout blackjack with practice tokens. Bet on the player or dealer, add an optional 15:1 Tie side bet, and see Breakout Bonus payouts.",
   "/breakout",
 );
 
 export default function BreakoutPage() {
   return (
     <GuideLayout eyebrow="Table guide · Breakout" title="Breakout blackjack"
-      intro="Choose which side wins, or bet on a tie. Once bets close, the player hand and dealer hand play automatically.">
+      intro="Choose which side wins, then optionally add a Tie side bet. Once bets close, the player hand and dealer hand play automatically.">
       <section>
         <h2>Pick one outcome</h2>
-        <p>Before each deal, put your main wager on Player wins, Dealer wins, or Tie. Both hands hit totals below 17 and hit soft 17. You do not choose hit, stand, double, split, or surrender in this mode. The table uses six decks and burns one card after each shuffle.</p>
+        <p>Before each deal, put your main wager on Player wins or Dealer wins. Both hands hit totals below 17 and hit soft 17. You do not choose hit, stand, double, split, or surrender in this mode. The table uses six decks and burns one card after each shuffle.</p>
         <p>A winning Player or Dealer bet pays 1:1. A winning two-card blackjack pays 3:2. Matching blackjacks push Player and Dealer bets. A Dealer bet also pushes when both hands bust or the player busts against dealer 17.</p>
       </section>
       <section>
-        <h2>Tie payouts</h2>
-        <p>The Tie choice uses the published Super Tie outcome odds, paid here entirely in practice tokens: both hands bust 1:1; matching totals of 17, 18, or 19 pay 3:1; 20 pays 8:1; a non-blackjack 21 pays 15:1; and matching blackjacks pay 25:1. Other results lose the Tie wager.</p>
+        <h2>Tie side bet</h2>
+        <p>The optional Tie side bet pays 15:1 when the finished player and dealer hands have the same total of 21 or less, including matching blackjacks, or when both hands bust. It settles separately from the main wager.</p>
       </section>
       <section>
         <h2>Breakout Bonus side bet</h2>
-        <p>When your main wager is Dealer wins, you may also bet on both the player and dealer busting. Add the cards in both finished hands to determine the payout. This optional bet settles separately from the main outcome.</p>
+        <p>With either main wager, you may also bet on both the player and dealer busting. Add the cards in both finished hands to determine the payout. This optional bet settles separately from the main outcome.</p>
         <table className="guidePaytable"><thead><tr><th scope="col">Combined cards</th><th scope="col">Pays</th></tr></thead><tbody>
           {[["6–7", "5:1"], ["8", "15:1"], ["9", "30:1"], ["10", "100:1"], ["11", "150:1"], ["12+", "250:1"]].map(([cards, payout]) =>
             <tr key={cards}><td>{cards}</td><td>{payout}</td></tr>)}
