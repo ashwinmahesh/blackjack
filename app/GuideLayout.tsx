@@ -8,6 +8,7 @@ const guides = [
   { href: "/breakout", label: "Breakout" },
   { href: "/double-up", label: "Double Up" },
   { href: "/side-bets", label: "Side bet payouts" },
+  { href: "/play-with-ai", label: "Play with AI" },
 ];
 
 export default function GuideLayout({ eyebrow, title, intro, children }: {

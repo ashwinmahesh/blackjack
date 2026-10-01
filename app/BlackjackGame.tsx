@@ -3341,6 +3341,7 @@ export default function BlackjackGame() {
             <a href="/breakout">Breakout</a>
             <a href="/double-up">Double Up</a>
             <a href="/side-bets">Side bet payouts</a>
+            <a href="/play-with-ai">Play with AI</a>
           </nav>
           <a
             className="githubHomeLink"

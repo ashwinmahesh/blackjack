@@ -1,6 +1,6 @@
 # Ashwin's Blackjack
 
-A mobile-first, six-deck blackjack game built with Next.js. It uses practice tokens only. Solo play offers Classic, Free Bet, and Double Down Madness; private multiplayer rooms use Classic rules. Fresh shoes burn and reveal one card before dealing. Both solo and multiplayer offer Perfect Pairs, 21+3, Match the Dealer, and Top 3 side bets. Multiplayer hosts can remove players, players can leave, and seated players can send each other tokens. Room players bring their saved token balance, and room balance changes carry back into solo play on the same browser.
+A mobile-first, six-deck blackjack game built with Next.js. It uses practice tokens only. Solo and private multiplayer support Classic, Free Bet, Double Down Madness, Breakout, and Double Up Blackjack. Fresh shoes burn and reveal one card before dealing. Multiplayer hosts can remove players, players can leave, and seated players can send each other tokens. Browser room players bring their saved token balance, and room balance changes carry back into solo play on the same browser.
 
 The Perfect Pairs, 21+3, and Top 3 payouts follow the [Nevada Gaming Control Board All Bets Blackjack rules](https://prod.gaming.nv.gov/siteassets/content/divisions/enforcement/rules-of-play/All_Bets_Blackjack_Live_Rules_of_Play.pdf). Match the Dealer uses the six-deck 4:1 and 11:1 schedule. Free Bet is based on the [South Dakota approved rule](https://sdlegislature.gov/api/Rules/Rule/20%3A18%3A15%3A30.14.html). Double Down Madness is based on the [Nevada approved rules](https://www.gaming.nv.gov/siteassets/content/divisions/technology/rules-of-play/double-down-madness---version-2.pdf); this game does not offer insurance or its special side wagers.
 
@@ -124,5 +124,14 @@ The token balance is persisted in browser storage, while an unfinished solo roun
 - `POST /api/rooms/:code/start` lets a ready host open the shared betting round.
 - `POST /api/rooms/:code/action` handles authoritative bets, hit, stand, double, split, surrender, donations, seat removal, leaving, settlement, and next-round actions.
 - `GET /api/rooms/:code/events` streams room versions over Server-Sent Events so clients see actions immediately.
+- `/mcp` exposes the same authoritative room engine through Streamable HTTP MCP tools for AI clients.
 
 The private-room UI applies newer streamed room versions and falls back to polling if the stream disconnects. It keeps dealer hole cards and shoe order server-side. The development room store is process-local, expires rooms after six hours, and is suitable for testing on one server instance. Before scaling Cloud Run above one instance, replace the store behind `lib/server/rooms.ts` with Firestore or another shared transactional store and a shared broadcast mechanism. Cloud Run instances are stateless and in-memory rooms are not shared across instances.
+
+## Play through an AI tool (MCP)
+
+Connect an MCP client that supports remote Streamable HTTP to `https://ashwinblackjack.com/mcp` after deployment, or `http://localhost:3000/mcp` during local development. The endpoint supports the current MCP protocol and stateless 2025-era clients. No account is needed. It validates the request Host and Origin headers; set `MCP_ALLOWED_HOSTS` to a comma-separated list of additional hostnames if you use another domain.
+
+Tools: `start_game`, `join_game`, `get_game`, `get_rules`, `place_bet`, `play_hand`, `next_round`, `wait_for_game`, and `leave_game`. `start_game` creates and starts a one-player table and returns a private `gameId` plus a room code and passcode for friends. Pass the `gameId` to subsequent tools. `get_game` reports visible cards, bankroll, legal actions, side bet choices, and room version. `get_rules` explains a mode before wagering. The MCP tools call the same server-authoritative room functions as the website, so the dealer hole card and shoe order stay private. Players can join an active table if a seat is open; `wait_for_game` blocks briefly for a newer room version.
+
+MCP tokens start at 500 unless specified, are independent of browser-local tokens, and have no cash value. The `gameId` is a bearer credential for that seat: keep it private. A game expires after six hours without room activity or when its server instance restarts. The production deployment is currently limited to one instance because room storage is in memory.

@@ -531,6 +531,12 @@ export function getRoom(code: string) {
   return publicRoom(requireRoom(code));
 }
 
+export function getRoomForPlayer(code: string, playerId: string) {
+  const room = requireRoom(code);
+  const player = requirePlayer(room, playerId);
+  return { room: publicRoom(room), seatId: player.id };
+}
+
 export function updateReady(code: string, playerId: string, ready: boolean) {
   const room = requireRoom(code);
   const player = requirePlayer(room, playerId);
